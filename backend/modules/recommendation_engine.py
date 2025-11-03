@@ -1,7 +1,7 @@
 """
-Recommendation Engine - Precise Distribution: 8 (Artist+Mood+Lang) + 4 (Lang+Mood) + 4 (Similar+Mood) + Fallback
+Recommendation Engine - With Fuzzy Artist Matching & Better Error Handling
 """
-from typing import List, Optional, Dict, Set
+from typing import List, Optional, Dict
 from .config import Config
 from .models import Song, PersonalizedRecommendationRequest, RecommendationRequest
 from .music_player import music_player
@@ -11,9 +11,9 @@ from datetime import datetime
 from collections import defaultdict
 import re
 
+
 class RecommendationEngine:
     
-    # Language to tag mapping - ONLY Hindi and English
     LANGUAGE_TO_TAG = {
         'hindi': 'bollywood',
         'english': 'pop'
@@ -24,6 +24,155 @@ class RecommendationEngine:
         self.user_history = defaultdict(list)
         self.user_favorites = defaultdict(list)
         self._track_cache = {}
+        self._artist_cache = {}  # Cache for fuzzy-matched artist names
+    
+    def fuzzy_match_artist(self, artist_query: str) -> str:
+            """
+            Dynamic fuzzy matching without hardcoding:
+            1. Cache check
+            2. Last.fm artist search (primary)
+            3. Last.fm track search (if artist search fails)
+            4. String similarity matching
+            """
+            if not artist_query or not self.lastfm:
+                return artist_query
+            
+            artist_query = artist_query.strip()
+            cache_key = artist_query.lower()
+            
+            # Check cache
+            if cache_key in self._artist_cache:
+                cached = self._artist_cache[cache_key]
+                print(f"  ✓ Cache: '{artist_query}' → '{cached}'")
+                return cached
+            
+            try:
+                # STRATEGY 1: Direct Last.fm artist search
+                print(f"  🔍 Searching Last.fm artist: '{artist_query}'")
+                search_results = self.lastfm.search_for_artist(artist_query)
+                matches = search_results.get_next_page() if hasattr(search_results, 'get_next_page') else list(search_results)
+                
+                if matches and len(matches) > 0:
+                    best_match = matches[0]
+                    corrected_name = best_match.name if hasattr(best_match, 'name') else str(best_match)
+                    
+                    # Cache and return
+                    self._artist_cache[cache_key] = corrected_name
+                    
+                    if corrected_name.lower() != artist_query.lower():
+                        print(f"  ✓ Last.fm corrected: '{artist_query}' → '{corrected_name}'")
+                    else:
+                        print(f"  ✓ Last.fm confirmed: '{corrected_name}'")
+                    
+                    return corrected_name
+                
+                # STRATEGY 2: If artist search fails, try track search
+                # (sometimes people type artist names that appear in track results)
+                print(f"  🔍 Trying track search for: '{artist_query}'")
+                track_search = self.lastfm.search_for_track('', artist_query)
+                track_matches = track_search.get_next_page() if hasattr(track_search, 'get_next_page') else list(track_search)
+                
+                if track_matches and len(track_matches) > 0:
+                    # Get artist from top track result
+                    top_track = track_matches[0]
+                    if hasattr(top_track, 'artist'):
+                        artist_obj = top_track.artist
+                        artist_name = artist_obj.name if hasattr(artist_obj, 'name') else str(artist_obj)
+                        
+                        # Check if this artist name is similar to query
+                        if self._is_similar(artist_query.lower(), artist_name.lower()):
+                            self._artist_cache[cache_key] = artist_name
+                            print(f"  ✓ Found via track: '{artist_query}' → '{artist_name}'")
+                            return artist_name
+                
+                # STRATEGY 3: Try removing common suffixes/typos
+                cleaned_query = self._clean_artist_query(artist_query)
+                if cleaned_query != artist_query:
+                    print(f"  🔍 Retry with cleaned: '{cleaned_query}'")
+                    return self.fuzzy_match_artist(cleaned_query)  # Recursive call
+                
+            except Exception as e:
+                print(f"  ⚠️  Search error for '{artist_query}': {e}")
+            
+            # FALLBACK: Return original
+            print(f"  ℹ️  No match found, using original: '{artist_query}'")
+            self._artist_cache[cache_key] = artist_query
+            return artist_query
+        
+    def _is_similar(self, str1: str, str2: str, threshold: float = 0.6) -> bool:
+        """Check if two strings are similar using simple ratio"""
+        if str1 == str2:
+            return True
+        
+        # Check if one contains the other
+        if str1 in str2 or str2 in str1:
+            return True
+        
+        # Simple character overlap ratio
+        set1 = set(str1.replace(' ', ''))
+        set2 = set(str2.replace(' ', ''))
+        
+        if not set1 or not set2:
+            return False
+        
+        intersection = len(set1 & set2)
+        union = len(set1 | set2)
+        
+        ratio = intersection / union if union > 0 else 0
+        return ratio >= threshold
+    
+    def _clean_artist_query(self, query: str) -> str:
+        """
+        Clean common typos and suffixes from artist query
+        Examples: 
+        - "arijit song" → "arijit"
+        - "taylor swift songs" → "taylor swift"
+        """
+        query = query.strip().lower()
+        
+        # Remove common suffixes
+        remove_words = ['song', 'songs', 'singer', 'music', 'artist', 'band']
+        
+        words = query.split()
+        if len(words) > 1 and words[-1] in remove_words:
+            cleaned = ' '.join(words[:-1])
+            return cleaned
+        
+        return query
+    
+    def parse_song_string(self, song_str: str, default_artists: List[str] = None) -> Dict[str, str]:
+        """
+        Parse song string to extract name and artist
+        Formats: "Song - Artist", "Song by Artist", "Song"
+        """
+        song_str = song_str.strip()
+        
+        # "Song - Artist"
+        if ' - ' in song_str:
+            parts = song_str.split(' - ', 1)
+            artist_raw = parts[1].strip()
+            return {
+                'name': parts[0].strip(),
+                'artist': self.fuzzy_match_artist(artist_raw)
+            }
+        
+        # "Song by Artist"
+        if ' by ' in song_str.lower():
+            parts = re.split(r' by ', song_str, flags=re.IGNORECASE, maxsplit=1)
+            artist_raw = parts[1].strip()
+            return {
+                'name': parts[0].strip(),
+                'artist': self.fuzzy_match_artist(artist_raw)
+            }
+        
+        # Use default artist
+        if default_artists and len(default_artists) > 0:
+            return {
+                'name': song_str,
+                'artist': self.fuzzy_match_artist(default_artists[0])
+            }
+        
+        return {'name': song_str, 'artist': ''}
     
     def track_to_song(self, track, skip_youtube: bool = False) -> Song:
         """Convert Last.fm track to Song"""
@@ -34,31 +183,34 @@ class RecommendationEngine:
         
         try:
             title = track.title if hasattr(track, 'title') else str(track)
-        except:
+        except Exception:
             title = str(track)
         
         try:
             if hasattr(track, 'artist'):
                 artist_obj = track.artist
                 artist_name = artist_obj.name if hasattr(artist_obj, 'name') else str(artist_obj)
-        except:
+        except Exception:
             artist_name = ""
         
         try:
             if hasattr(track, 'get_url'):
                 url = track.get_url()
-        except:
+        except Exception:
             pass
         
         try:
             if hasattr(track, 'get_playcount'):
                 playcount = track.get_playcount()
-        except:
+        except Exception:
             pass
         
         youtube_id = None
         if not skip_youtube and title and artist_name:
-            youtube_id = music_player.get_youtube_id(f"{artist_name} {title}")
+            try:
+                youtube_id = music_player.get_youtube_id(f"{artist_name} {title}")
+            except Exception:
+                youtube_id = None
         
         song_id = f"{artist_name}_{title}".replace(" ", "_").lower()[:50]
         
@@ -92,7 +244,7 @@ class RecommendationEngine:
                     track_obj = track_info[0] if isinstance(track_info, (list, tuple)) else track_info
                     song = self.track_to_song(track_obj, skip_youtube=True)
                     songs.append(song)
-                except:
+                except Exception:
                     continue
         except Exception as e:
             print(f"Error for tag '{tag}': {e}")
@@ -100,18 +252,20 @@ class RecommendationEngine:
         return songs
     
     def get_artist_top_tracks(self, artist_name: str, limit: int = 10, mood_filter: Optional[str] = None) -> List[Song]:
-        """Get artist's top tracks, optionally filtered by mood"""
+        """Get artist's top tracks with fuzzy matching"""
         songs = []
         if not self.lastfm:
             return songs
         
+        # CRITICAL: Apply fuzzy matching
+        corrected_artist = self.fuzzy_match_artist(artist_name)
+        
         try:
-            print(f"  🎤 Fetching tracks for: {artist_name}")
+            print(f"  🎤 Fetching tracks for: {corrected_artist}")
             if mood_filter:
                 print(f"     🎭 Filtering by mood: {mood_filter}")
             
-            artist = self.lastfm.get_artist(artist_name)
-            # Get more tracks initially to filter by mood
+            artist = self.lastfm.get_artist(corrected_artist)
             fetch_limit = limit * 3 if mood_filter else limit
             top_tracks = artist.get_top_tracks()[:fetch_limit]
             
@@ -122,20 +276,13 @@ class RecommendationEngine:
                 try:
                     track_obj = track_info[0] if isinstance(track_info, (list, tuple)) else track_info
                     
-                    # If mood filter is set, check if track matches mood
                     if mood_filter:
                         try:
-                            # Get track tags to check mood
                             track_tags = track_obj.get_tags() if hasattr(track_obj, 'get_tags') else []
                             track_tag_names = [tag.name.lower() if hasattr(tag, 'name') else str(tag).lower() for tag in track_tags]
-                            
-                            # Get mood tags for comparison
                             mood_tags = [tag.lower() for tag in MoodDetector.get_mood_tags(mood_filter)]
-                            
-                            # Check if any mood tag matches
                             matches_mood = any(mood_tag in track_tag_names for mood_tag in mood_tags)
                             
-                            # Also check track name for mood keywords
                             track_title = track_obj.title.lower() if hasattr(track_obj, 'title') else str(track_obj).lower()
                             mood_keywords = {
                                 'happy': ['happy', 'joy', 'celebration', 'party', 'dance', 'fun', 'upbeat'],
@@ -150,12 +297,10 @@ class RecommendationEngine:
                             if mood_filter in mood_keywords:
                                 keyword_match = any(keyword in track_title for keyword in mood_keywords[mood_filter])
                             
-                            # Skip if doesn't match mood (but accept if no tags available)
                             if track_tags and not matches_mood and not keyword_match:
                                 print(f"     ⊘ Skipped (mood mismatch): {track_obj.title}")
                                 continue
-                        except:
-                            # If error checking tags, include the song
+                        except Exception:
                             pass
                     
                     song = self.track_to_song(track_obj, skip_youtube=True)
@@ -165,101 +310,115 @@ class RecommendationEngine:
                     print(f"     ✗ Error converting track: {e}")
                     continue
             
-            print(f"  ✓ Got {len(songs)} tracks from {artist_name}" + (f" (mood-filtered: {mood_filter})" if mood_filter else ""))
+            print(f"  ✓ Got {len(songs)} tracks from {corrected_artist}" + (f" (mood-filtered: {mood_filter})" if mood_filter else ""))
         except Exception as e:
-            print(f"  ✗ Error getting tracks for {artist_name}: {e}")
+            print(f"  ✗ Error getting tracks for {corrected_artist}: {e}")
         
         return songs
     
     def search_by_artist(self, artist_name: str, limit: int = 10, mood_filter: Optional[str] = None) -> List[Song]:
-        """Search songs by specific artist, optionally filtered by mood"""
+        """Search songs by artist with fuzzy matching"""
         if not self.lastfm:
             return []
         
-        print(f"🎤 Searching for artist: {artist_name}")
+        corrected_artist = self.fuzzy_match_artist(artist_name)
+        print(f"🎤 Searching for artist: {corrected_artist}")
         if mood_filter:
             print(f"   🎭 With mood filter: {mood_filter}")
-        songs = self.get_artist_top_tracks(artist_name, limit=limit, mood_filter=mood_filter)
         
-        # Add YouTube IDs
+        songs = self.get_artist_top_tracks(corrected_artist, limit=limit, mood_filter=mood_filter)
+        
         for song in songs:
             if not song.youtube_id and song.name and song.artist:
-                youtube_id = music_player.get_youtube_id(f"{song.artist} {song.name}")
-                if youtube_id:
-                    song.youtube_id = youtube_id
-                    song.preview_url = f"https://www.youtube.com/watch?v={youtube_id}"
+                try:
+                    youtube_id = music_player.get_youtube_id(f"{song.artist} {song.name}")
+                    if youtube_id:
+                        song.youtube_id = youtube_id
+                        song.preview_url = f"https://www.youtube.com/watch?v={youtube_id}"
+                except Exception:
+                    pass
         
         return songs
     
     def search_track(self, name: str, artist: Optional[str] = None) -> Optional[Song]:
-        """
-        Search for a specific track by name and optionally artist
-        
-        Args:
-            name: Song name to search for
-            artist: Optional artist name to narrow search
-            
-        Returns:
-            Song object if found, None otherwise
-        """
+        """Search track with fuzzy artist matching and YouTube ID guarantee"""
         if not self.lastfm:
             return None
         
         try:
-            # Create cache key
-            cache_key = f"{artist}_{name}".lower() if artist else name.lower()
+            # Apply fuzzy matching to artist
+            corrected_artist = self.fuzzy_match_artist(artist) if artist else None
             
-            # Check cache first
+            cache_key = f"{corrected_artist}_{name}".lower() if corrected_artist else name.lower()
+            
             if cache_key in self._track_cache:
-                print(f"✓ Cache hit for: {name} by {artist}")
-                return self._track_cache[cache_key]
+                cached_song = self._track_cache[cache_key]
+                if cached_song.youtube_id:
+                    print(f"✓ Cache hit: {name} by {corrected_artist}")
+                    return cached_song
+                else:
+                    print(f"⚠️  Cache hit but no YouTube ID, re-fetching...")
             
-            print(f"🔍 Searching for track: {name}" + (f" by {artist}" if artist else ""))
+            print(f"🔍 Searching: {name}" + (f" by {corrected_artist}" if corrected_artist else ""))
             
-            # Search using Last.fm API
-            if artist:
-                # Direct track lookup with artist
+            # Try direct lookup
+            if corrected_artist:
                 try:
-                    track = self.lastfm.get_track(artist, name)
+                    track = self.lastfm.get_track(corrected_artist, name)
                     song = self.track_to_song(track, skip_youtube=False)
                     
-                    # Cache the result
+                    if not song.youtube_id:
+                        print(f"  ⚠️  No YouTube ID, fetching manually...")
+                        youtube_id = music_player.get_youtube_id(f"{corrected_artist} {name}")
+                        if youtube_id:
+                            song.youtube_id = youtube_id
+                            song.preview_url = f"https://www.youtube.com/watch?v={youtube_id}"
+                            print(f"  ✓ YouTube ID added: {youtube_id}")
+                    
                     self._track_cache[cache_key] = song
                     print(f"✓ Found: {song.name} by {song.artist}")
                     return song
                 except Exception as e:
                     print(f"  Direct lookup failed: {e}")
             
-            # Fallback: Search by track name
-            search_results = self.lastfm.search_for_track(artist or '', name)
+            # Fallback search
+            search_results = self.lastfm.search_for_track(corrected_artist or '', name)
             matches = search_results.get_next_page() if hasattr(search_results, 'get_next_page') else list(search_results)
             
             if matches:
-                # Convert first match to Song
                 first_match = matches[0]
                 song = self.track_to_song(first_match, skip_youtube=False)
                 
-                # Cache the result
+                if not song.youtube_id:
+                    search_query = f"{song.artist} {song.name}" if song.artist else song.name
+                    youtube_id = music_player.get_youtube_id(search_query)
+                    if youtube_id:
+                        song.youtube_id = youtube_id
+                        song.preview_url = f"https://www.youtube.com/watch?v={youtube_id}"
+                
                 self._track_cache[cache_key] = song
                 print(f"✓ Found via search: {song.name} by {song.artist}")
                 return song
             
-            print(f"✗ No results found for: {name}" + (f" by {artist}" if artist else ""))
+            print(f"✗ No results for: {name}")
             return None
             
         except Exception as e:
-            print(f"✗ Error searching for track '{name}': {e}")
+            print(f"✗ Error searching '{name}': {e}")
             return None
     
     def get_similar_tracks(self, track_name: str, artist: str, limit: int = 5, mood_filter: Optional[str] = None) -> List[Song]:
-        """Get similar tracks based on a favorite song, optionally filtered by mood"""
+        """Get similar tracks with fuzzy artist matching"""
         if not self.lastfm:
             return []
         
+        # Apply fuzzy matching
+        corrected_artist = self.fuzzy_match_artist(artist)
+        
         songs = []
         try:
-            track = self.lastfm.get_track(artist, track_name)
-            # Get more tracks if mood filtering
+            print(f"  🔍 Finding similar to: '{track_name}' by {corrected_artist}")
+            track = self.lastfm.get_track(corrected_artist, track_name)
             fetch_limit = limit * 3 if mood_filter else limit
             similar = track.get_similar(limit=fetch_limit)
             
@@ -270,20 +429,13 @@ class RecommendationEngine:
                 try:
                     track_obj = similar_track[0] if isinstance(similar_track, (list, tuple)) else similar_track
                     
-                    # If mood filter is set, check if track matches mood
                     if mood_filter:
                         try:
-                            # Get track tags
                             track_tags = track_obj.get_tags() if hasattr(track_obj, 'get_tags') else []
                             track_tag_names = [tag.name.lower() if hasattr(tag, 'name') else str(tag).lower() for tag in track_tags]
-                            
-                            # Get mood tags
                             mood_tags = [tag.lower() for tag in MoodDetector.get_mood_tags(mood_filter)]
-                            
-                            # Check if matches mood
                             matches_mood = any(mood_tag in track_tag_names for mood_tag in mood_tags)
                             
-                            # Check title for mood keywords
                             track_title = track_obj.title.lower() if hasattr(track_obj, 'title') else str(track_obj).lower()
                             mood_keywords = {
                                 'happy': ['happy', 'joy', 'celebration', 'party', 'dance'],
@@ -298,30 +450,31 @@ class RecommendationEngine:
                             if mood_filter in mood_keywords:
                                 keyword_match = any(keyword in track_title for keyword in mood_keywords[mood_filter])
                             
-                            # Skip if doesn't match mood
                             if track_tags and not matches_mood and not keyword_match:
                                 continue
-                        except:
+                        except Exception:
                             pass
                     
                     song = self.track_to_song(track_obj, skip_youtube=True)
                     songs.append(song)
-                except:
+                    print(f"     ✓ Similar: {song.name}")
+                except Exception:
                     continue
+                    
+            print(f"  ✓ Found {len(songs)} similar tracks")
         except Exception as e:
-            print(f"Error getting similar tracks: {e}")
+            print(f"  ✗ Error getting similar tracks: {e}")
         
         return songs
     
     def add_favorite_song(self, user_id: str, song_name: str, artist: str) -> Dict:
-        """Add a song to user's favorites"""
+        """Add song to favorites"""
         favorite = {
             'name': song_name,
             'artist': artist,
             'added_at': datetime.now().isoformat()
         }
         
-        # Check if already in favorites
         existing = [f for f in self.user_favorites[user_id] 
                    if f['name'].lower() == song_name.lower() 
                    and f['artist'].lower() == artist.lower()]
@@ -333,12 +486,12 @@ class RecommendationEngine:
             return {"message": "Already in favorites", "favorite": existing[0]}
     
     def get_favorites(self, user_id: str) -> Dict:
-        """Get user's favorite songs"""
+        """Get user favorites"""
         favorites = self.user_favorites[user_id]
         return {"user_id": user_id, "total": len(favorites), "favorites": favorites}
     
     def remove_favorite(self, user_id: str, song_name: str, artist: str) -> Dict:
-        """Remove a song from favorites"""
+        """Remove from favorites"""
         original_count = len(self.user_favorites[user_id])
         self.user_favorites[user_id] = [
             f for f in self.user_favorites[user_id]
@@ -349,30 +502,37 @@ class RecommendationEngine:
         removed = original_count > len(self.user_favorites[user_id])
         return {"removed": removed, "remaining": len(self.user_favorites[user_id])}
     
+    def get_user_history(self, user_id: str, limit: int = 50) -> Dict:
+        """Get listening history"""
+        history = self.user_history[user_id][-limit:]
+        return {
+            "user_id": user_id,
+            "total_songs": len(self.user_history[user_id]),
+            "history": history
+        }
+    
     def get_personalized_recommendations(self, request: PersonalizedRecommendationRequest) -> Dict:
         """
-        Get personalized recommendations with EXACT distribution:
-        - 8 songs: Artist + Mood + Language (40%)
-        - 4 songs: Language + Mood (20%)
-        - 4 songs: Similar to Favorite Songs + Mood (20%)
-        - Remaining: Fallback (at least Language-based) (20%)
+        Personalized recommendations with FUZZY MATCHING:
+        - 8: Artist + Mood + Language
+        - 4: Language + Mood
+        - 4: Similar + Mood
+        - Rest: Fallback
         """
         if not self.lastfm:
             raise HTTPException(status_code=503, detail="Last.fm not configured")
         
-        mood = request.mood.lower()
+        mood = (request.mood or '').lower()
         if not MoodDetector.validate_mood(mood):
             raise HTTPException(status_code=400, detail=f"Invalid mood: {mood}")
         
-        prefs = request.preferences
+        prefs = request.preferences or {}
         
-        # Normalize language
-        language = prefs.get('language', '').lower()
+        language = (prefs.get('language') or '').lower()
         if language not in ['hindi', 'english']:
             print(f"⚠️  Invalid language '{language}', defaulting to 'english'")
             language = 'english'
         
-        # Extract favorite data with multiple field name variations
         favorite_songs = (
             prefs.get('favoriteSongs') or 
             prefs.get('favorite_songs') or 
@@ -388,54 +548,59 @@ class RecommendationEngine:
             []
         )
         
-        # Ensure arrays are lists
         if isinstance(favorite_songs, str):
             favorite_songs = [s.strip() for s in favorite_songs.split(',') if s.strip()]
         if isinstance(favorite_singers, str):
             favorite_singers = [s.strip() for s in favorite_singers.split(',') if s.strip()]
         
+        # FUZZY MATCH ALL ARTISTS
+        corrected_singers = []
+        for singer in favorite_singers:
+            corrected = self.fuzzy_match_artist(singer)
+            if corrected:
+                corrected_singers.append(corrected)
+        
         print(f"\n{'='*60}")
-        print(f"🎵 PERSONALIZED RECOMMENDATION REQUEST")
+        print(f"🎵 PERSONALIZED RECOMMENDATIONS")
         print(f"{'='*60}")
         print(f"Language: {language.upper()}")
         print(f"Mood: {mood.upper()}")
-        print(f"Favorite Singers: {favorite_singers}")
+        print(f"Favorite Singers (original): {favorite_singers}")
+        print(f"Favorite Singers (corrected): {corrected_singers}")
         print(f"Favorite Songs: {favorite_songs}")
-        print(f"Target Total: {request.limit} songs")
+        print(f"Target: {request.limit} songs")
         print(f"{'='*60}\n")
         
         all_songs = []
         added = set()
         
-        # Get tags
         mood_tags = MoodDetector.get_mood_tags(mood)
         language_tag = self.LANGUAGE_TO_TAG.get(language, 'pop')
         
         print(f"🏷️  Tags - Language: '{language_tag}', Mood: {mood_tags}\n")
         
-        # Category counts
-        cat1_count = 0  # Artist + Mood + Language
-        cat2_count = 0  # Language + Mood
-        cat3_count = 0  # Similar + Mood
-        cat4_count = 0  # Fallback
+        cat1_count = 0
+        cat2_count = 0
+        cat3_count = 0
+        cat4_count = 0
         
-        # ============================================================
-        # CATEGORY 1: Artist + Mood + Language - EXACTLY 8 songs
-        # ============================================================
         TARGET_CAT1 = 8
+        TARGET_CAT2 = 4
+        TARGET_CAT3 = 4
         
-        if favorite_singers:
-            print(f"📌 CATEGORY 1: Getting EXACTLY {TARGET_CAT1} songs (Artist + Mood + Language)")
-            songs_per_artist = max(3, TARGET_CAT1 // len(favorite_singers[:3]))
+        # CATEGORY 1: Artist + Mood + Language
+        if corrected_singers:
+            print(f"📌 CATEGORY 1: Getting {TARGET_CAT1} songs (Artist + Mood + Language)")
+            songs_per_artist = max(3, TARGET_CAT1 // len(corrected_singers[:3]))
             
-            for singer in favorite_singers[:3]:
+            for singer in corrected_singers[:3]:
                 if cat1_count >= TARGET_CAT1:
                     break
                     
                 print(f"  🎤 Artist: {singer}")
                 artist_songs = self.get_artist_top_tracks(
                     singer, 
-                    limit=songs_per_artist * 2,  # Get extra for filtering
+                    limit=songs_per_artist * 2,
                     mood_filter=mood
                 )
                 
@@ -451,33 +616,22 @@ class RecommendationEngine:
             
             print(f"  ✅ Category 1: {cat1_count}/{TARGET_CAT1} songs\n")
         else:
-            print(f"⏭️  CATEGORY 1: Skipped (no favorite artists)\n")
+            print(f"⏭️  CATEGORY 1: Skipped (no artists)\n")
         
-        # ============================================================
-        # CATEGORY 2: Language + Mood - EXACTLY 4 songs
-        # ============================================================
-        TARGET_CAT2 = 4
+        # CATEGORY 2: Language + Mood
+        print(f"📌 CATEGORY 2: Getting {TARGET_CAT2} songs (Language + Mood)")
         
-        print(f"📌 CATEGORY 2: Getting EXACTLY {TARGET_CAT2} songs (Language + Mood)")
-        
-        # Combine language and mood songs
         combined_pool = []
-        
-        # Get language songs
-        print(f"  🌍 Fetching {language} songs...")
         lang_songs = self.get_top_tracks_by_tag(language_tag, limit=20)
         combined_pool.extend(lang_songs)
-        print(f"     Retrieved {len(lang_songs)} language songs")
+        print(f"  🌍 Retrieved {len(lang_songs)} {language} songs")
         
-        # Get mood songs
         if mood_tags:
-            print(f"  😊 Fetching mood songs...")
             for mood_tag in mood_tags[:2]:
                 mood_songs = self.get_top_tracks_by_tag(mood_tag, limit=15)
                 combined_pool.extend(mood_songs)
-                print(f"     Retrieved {len(mood_songs)} for '{mood_tag}'")
+                print(f"  😊 Retrieved {len(mood_songs)} for '{mood_tag}'")
         
-        # Add unique songs
         for song in combined_pool:
             if cat2_count >= TARGET_CAT2:
                 break
@@ -489,27 +643,19 @@ class RecommendationEngine:
         
         print(f"  ✅ Category 2: {cat2_count}/{TARGET_CAT2} songs\n")
         
-        # ============================================================
-        # CATEGORY 3: Similar to Favorite Songs + Mood - EXACTLY 4 songs
-        # ============================================================
-        TARGET_CAT3 = 4
-        
+        # CATEGORY 3: Similar + Mood
         if favorite_songs:
-            print(f"📌 CATEGORY 3: Getting EXACTLY {TARGET_CAT3} songs (Similar + Mood)")
+            print(f"📌 CATEGORY 3: Getting {TARGET_CAT3} songs (Similar + Mood)")
             songs_per_favorite = max(2, TARGET_CAT3 // len(favorite_songs[:3]))
             
             for fav_song in favorite_songs[:3]:
                 if cat3_count >= TARGET_CAT3:
                     break
                 
-                # Parse song format
-                if ' - ' in fav_song:
-                    parts = fav_song.split(' - ')
-                    song_name = parts[0].strip()
-                    artist_name = parts[1].strip() if len(parts) > 1 else ''
-                else:
-                    song_name = fav_song.strip()
-                    artist_name = favorite_singers[0] if favorite_singers else ''
+                # Parse with fuzzy matching
+                parsed = self.parse_song_string(fav_song, corrected_singers)
+                song_name = parsed['name']
+                artist_name = parsed['artist']
                 
                 if not artist_name:
                     print(f"  ⚠️  Skipping '{song_name}' - no artist")
@@ -522,8 +668,6 @@ class RecommendationEngine:
                     limit=songs_per_favorite * 2,
                     mood_filter=mood
                 )
-                
-                print(f"     Found {len(similar_songs)} similar songs")
                 
                 for song in similar_songs:
                     if cat3_count >= TARGET_CAT3:
@@ -539,36 +683,23 @@ class RecommendationEngine:
         else:
             print(f"⏭️  CATEGORY 3: Skipped (no favorite songs)\n")
         
-        # ============================================================
-        # CATEGORY 4: FALLBACK - Fill remaining (minimum language-based)
-        # ============================================================
+        # CATEGORY 4: Fallback
         remaining = request.limit - len(all_songs)
         
         if remaining > 0:
-            print(f"📌 CATEGORY 4: FALLBACK - Need {remaining} more songs")
+            print(f"📌 CATEGORY 4: FALLBACK - Need {remaining} more")
             
             fallback_pool = []
-            
-            # Priority 1: Language-based songs (MANDATORY)
-            print(f"  🌍 Fetching more {language} songs...")
             lang_fallback = self.get_top_tracks_by_tag(language_tag, limit=remaining * 3)
             fallback_pool.extend(lang_fallback)
-            print(f"     Retrieved {len(lang_fallback)} language songs")
+            print(f"  🌍 Retrieved {len(lang_fallback)} {language} songs")
             
-            # Priority 2: Mood-based songs
             if mood_tags:
-                print(f"  😊 Fetching more mood songs...")
                 for mood_tag in mood_tags:
                     mood_fallback = self.get_top_tracks_by_tag(mood_tag, limit=remaining * 2)
                     fallback_pool.extend(mood_fallback)
-                    print(f"     Retrieved {len(mood_fallback)} for '{mood_tag}'")
+                    print(f"  😊 Retrieved {len(mood_fallback)} for '{mood_tag}'")
             
-            # Priority 3: Popular tracks from language
-            print(f"  ⭐ Fetching popular {language} tracks...")
-            popular = self.get_top_tracks_by_tag(language_tag, limit=30)
-            fallback_pool.extend(popular)
-            
-            # Add unique songs
             for song in fallback_pool:
                 if len(all_songs) >= request.limit:
                     break
@@ -580,44 +711,54 @@ class RecommendationEngine:
             
             print(f"  ✅ Category 4: {cat4_count}/{remaining} songs\n")
         
-        # Sort by popularity
         all_songs.sort(key=lambda x: (x.playcount or 0), reverse=True)
         final = all_songs[:request.limit]
         
         print(f"\n{'='*60}")
         print(f"✅ FINAL DISTRIBUTION")
         print(f"{'='*60}")
-        print(f"Total Songs: {len(final)}/{request.limit}")
-        print(f"├─ Cat 1 (Artist+Mood+Lang): {cat1_count} songs")
-        print(f"├─ Cat 2 (Language+Mood): {cat2_count} songs")
-        print(f"├─ Cat 3 (Similar+Mood): {cat3_count} songs")
-        print(f"└─ Cat 4 (Fallback): {cat4_count} songs")
+        print(f"Total: {len(final)}/{request.limit}")
+        print(f"├─ Cat 1 (Artist+Mood+Lang): {cat1_count}")
+        print(f"├─ Cat 2 (Language+Mood): {cat2_count}")
+        print(f"├─ Cat 3 (Similar+Mood): {cat3_count}")
+        print(f"└─ Cat 4 (Fallback): {cat4_count}")
         print(f"{'='*60}\n")
         
-        # Add YouTube IDs
         print("🎬 Fetching YouTube IDs...")
         youtube_success = 0
         for i, song in enumerate(final, 1):
             if not song.youtube_id and song.name and song.artist:
-                youtube_id = music_player.get_youtube_id(f"{song.artist} {song.name}")
-                if youtube_id:
-                    song.youtube_id = youtube_id
-                    song.preview_url = f"https://www.youtube.com/watch?v={youtube_id}"
-                    youtube_success += 1
+                try:
+                    youtube_id = music_player.get_youtube_id(f"{song.artist} {song.name}")
+                    if youtube_id:
+                        song.youtube_id = youtube_id
+                        song.preview_url = f"https://www.youtube.com/watch?v={youtube_id}"
+                        youtube_success += 1
+                except Exception:
+                    pass
             if i % 5 == 0:
-                print(f"   Processed {i}/{len(final)} songs...")
+                print(f"   Processed {i}/{len(final)}...")
         
-        print(f"✅ YouTube IDs: {youtube_success}/{len(final)} successful\n")
+        print(f"✅ YouTube IDs: {youtube_success}/{len(final)}\n")
         
-        # Update user history
         for s in final:
-            self.user_history[request.user_id].append({
-                'song': s.dict(),
-                'mood': mood,
-                'language': language,
-                'timestamp': datetime.now().isoformat(),
-                'source': 'personalized'
-            })
+            try:
+                self.user_history[request.user_id].append({
+                    'song': s.dict() if hasattr(s, 'dict') else s.__dict__,
+                    'mood': mood,
+                    'language': language,
+                    'timestamp': datetime.now().isoformat(),
+                    'source': 'personalized'
+                })
+            except Exception:
+                # Best-effort: store minimal info
+                self.user_history[request.user_id].append({
+                    'song': {'name': getattr(s, 'name', None), 'artist': getattr(s, 'artist', None)},
+                    'mood': mood,
+                    'language': language,
+                    'timestamp': datetime.now().isoformat(),
+                    'source': 'personalized'
+                })
         
         return {
             "songs": final,
@@ -632,20 +773,19 @@ class RecommendationEngine:
             },
             "preferences_applied": {
                 "language": language,
-                "favorite_singers_count": len(favorite_singers),
+                "favorite_singers": corrected_singers,
                 "favorite_songs_count": len(favorite_songs)
             }
         }
     
     def get_basic_recommendations(self, request: RecommendationRequest) -> Dict:
-        """Basic mood-based recommendations (no personalization)"""
+        """Basic mood-based recommendations"""
         if not self.lastfm:
             raise HTTPException(status_code=503, detail="Last.fm not configured")
         
-        mood = request.mood.lower()
+        mood = (request.mood or '').lower()
         if not MoodDetector.validate_mood(mood):
             raise HTTPException(status_code=400, detail=f"Invalid mood: {mood}")
-        
         mood_tags = MoodDetector.get_mood_tags(mood)
         recommendations = []
         added = set()
@@ -664,13 +804,15 @@ class RecommendationEngine:
                     added.add(key)
                     recommendations.append(s)
         
-        # Add YouTube IDs
         for song in recommendations:
             if not song.youtube_id and song.name and song.artist:
-                youtube_id = music_player.get_youtube_id(f"{song.artist} {song.name}")
-                if youtube_id:
-                    song.youtube_id = youtube_id
-                    song.preview_url = f"https://www.youtube.com/watch?v={youtube_id}"
+                try:
+                    youtube_id = music_player.get_youtube_id(f"{song.artist} {song.name}")
+                    if youtube_id:
+                        song.youtube_id = youtube_id
+                        song.preview_url = f"https://www.youtube.com/watch?v={youtube_id}"
+                except Exception:
+                    pass
         
         print(f"✅ Retrieved {len(recommendations)} songs\n")
         
@@ -680,44 +822,62 @@ class RecommendationEngine:
             "total": len(recommendations)
         }
     
-    def search_music(self, query: str, limit: int = 10) -> Dict:
-        """Search music by name or artist"""
+    def search_music(self, query: str, limit: int = 10) -> List[Song]:
+        """Search music by name or artist with fuzzy matching"""
         if not self.lastfm:
             raise HTTPException(status_code=503, detail="Last.fm not configured")
         
         results = []
         try:
             print(f"\n🔍 Searching for: '{query}'")
-            search = self.lastfm.search_for_track('', query)
-            matches = search.get_next_page() if hasattr(search, 'get_next_page') else list(search)
             
-            for match in matches[:limit]:
-                try:
-                    song = self.track_to_song(match, skip_youtube=False)
-                    results.append(song)
-                except Exception as e:
-                    print(f"   Error processing match: {e}")
-                    continue
+            # Try as artist first
+            try:
+                corrected_artist = self.fuzzy_match_artist(query)
+                artist_songs = self.get_artist_top_tracks(corrected_artist, limit=min(5, limit))
+                if artist_songs:
+                    print(f"  ✓ Found as artist: {corrected_artist}")
+                    results.extend(artist_songs)
+            except Exception as e:
+                print(f"  ℹ️  Not an artist: {e}")
+            
+            # Search as track
+            if len(results) < limit:
+                search = self.lastfm.search_for_track('', query)
+                matches = search.get_next_page() if hasattr(search, 'get_next_page') else list(search)
+                
+                added = set(f"{s.name}-{s.artist}".lower() for s in results)
+                
+                for match in matches:
+                    if len(results) >= limit:
+                        break
+                    try:
+                        song = self.track_to_song(match, skip_youtube=False)
+                        key = f"{song.name}-{song.artist}".lower()
+                        if key not in added:
+                            results.append(song)
+                            added.add(key)
+                    except Exception as e:
+                        print(f"   Error processing match: {e}")
+                        continue
+            
+            # Ensure YouTube IDs
+            for song in results:
+                if not song.youtube_id and song.name and song.artist:
+                    try:
+                        youtube_id = music_player.get_youtube_id(f"{song.artist} {song.name}")
+                        if youtube_id:
+                            song.youtube_id = youtube_id
+                            song.preview_url = f"https://www.youtube.com/watch?v={youtube_id}"
+                    except Exception:
+                        pass
             
             print(f"✅ Found {len(results)} results\n")
         except Exception as e:
             print(f"❌ Search error: {e}\n")
             raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
         
-        return {
-            "results": results,
-            "query": query,
-            "total": len(results)
-        }
-    
-    def get_user_history(self, user_id: str, limit: int = 50) -> Dict:
-        """Get user listening history"""
-        history = self.user_history[user_id][-limit:]
-        return {
-            "user_id": user_id,
-            "total_songs": len(self.user_history[user_id]),
-            "history": history
-        }
+        return results
 
 # Global instance
 recommendation_engine = RecommendationEngine()

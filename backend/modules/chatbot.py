@@ -1,140 +1,209 @@
 """
-Advanced Chatbot Module - With song recognition and auto-play (No lyrics search)
+Enhanced Chatbot - Better Song Detection and Recommendations
 """
-import re
+import os
+from dotenv import load_dotenv
+import google.generativeai as genai
 from typing import List, Dict, Optional
-from .config import Config
-from .models import ChatMessage
-from .recommendation_engine import recommendation_engine
-from fastapi import HTTPException
-from datetime import datetime
+import json
+import re
 
-class Chatbot:
-    
+load_dotenv()
+
+class MusicChatbot:
     def __init__(self):
-        self.gemini = Config.get_gemini()
-        self.conversation_contexts = {}
-    
-    def create_context(self, current_mood: Optional[str], user_id: str) -> str:
-        mood_text = f"Current mood: {current_mood}" if current_mood else "Mood: Not set"
+        api_key = os.getenv('GEMINI_API_KEY')
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY not found in environment variables")
         
-        context = f"""You are MoodTunes AI, an advanced music recommendation assistant.
-
-User: {user_id}, {mood_text}
-
-SPECIAL ABILITIES:
-1. Song Recognition: Identify songs by name or artist
-2. Direct Play: When user says "play [song]", respond: PLAY: "Song Name" by Artist Name
-3. Music Recommendations: Suggest songs based on mood, genre, or artist
-
-FORMATS:
-- Recommendations: "Song Name" by Artist Name
-- Auto-play: PLAY: "Song Name" by Artist Name
-
-Examples:
-User: "play shape of you"
-You: PLAY: "Shape of You" by Ed Sheeran
-
-User: "recommend some Arijit Singh songs"
-You: Here are some great Arijit Singh songs: "Tum Hi Ho" by Arijit Singh, "Channa Mereya" by Arijit Singh
-
-User: "play some happy songs"
-You: Here are upbeat songs: "Happy" by Pharrell Williams, "Can't Stop the Feeling" by Justin Timberlake
-
-Be helpful and music-focused!"""
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        self.chat = None
+        self.conversation_history: List[Dict] = []
         
-        return context
+        self.system_prompt = """You are MelodyMind, an AI music assistant that helps users find and play music.
+
+CORE CAPABILITIES:
+1. Direct Playback: When user wants to play a specific song
+2. Recommendations: Suggest songs based on mood, genre, or artist
+3. Song Search: Find songs by lyrics, artist name, or description
+4. Conversational: Engage naturally about music
+
+RESPONSE FORMATS:
+
+1. DIRECT PLAYBACK (user says "play X"):
+   Format: [PLAY: Song Name - Artist Name]
+   Example: "Sure! [PLAY: Shape of You - Ed Sheeran]"
+
+2. RECOMMENDATIONS (user asks for suggestions):
+   Format: [RECOMMEND: Song Name - Artist Name]
+   Use multiple [RECOMMEND] tags
+   Example: 
+   "Here are some upbeat songs:
+   [RECOMMEND: Happy - Pharrell Williams]
+   [RECOMMEND: Can't Stop the Feeling - Justin Timberlake]
+   [RECOMMEND: Uptown Funk - Mark Ronson]"
+
+3. SEARCH BY LYRICS/DESCRIPTION:
+   When user provides lyrics or description, identify the song and use [PLAY] format
+   Example: User: "Play that song about letting it go"
+   You: "I think you mean [PLAY: Let It Go - Idina Menzel]"
+
+IMPORTANT RULES:
+- NEVER provide actual song lyrics (copyright)
+- Always use [PLAY] for single song playback
+- Always use [RECOMMEND] for multiple suggestions
+- Be conversational and friendly
+- If unsure about a song, ask for clarification
+
+EXAMPLES:
+
+User: "Play Bohemian Rhapsody"
+You: "Great choice! [PLAY: Bohemian Rhapsody - Queen]"
+
+User: "I want something energetic for workout"
+You: "Here are some high-energy workout songs:
+[RECOMMEND: Eye of the Tiger - Survivor]
+[RECOMMEND: Lose Yourself - Eminem]
+[RECOMMEND: Thunder - Imagine Dragons]"
+
+User: "Play that song that goes I'm walking on sunshine"
+You: "I think you're looking for [PLAY: Walking on Sunshine - Katrina and the Waves]"
+
+User: "Recommend some Coldplay songs"
+You: "Here are some great Coldplay tracks:
+[RECOMMEND: Yellow - Coldplay]
+[RECOMMEND: Viva la Vida - Coldplay]
+[RECOMMEND: Fix You - Coldplay]"
+
+User: "Songs by Taylor Swift"
+You: "Here are popular Taylor Swift songs:
+[RECOMMEND: Shake It Off - Taylor Swift]
+[RECOMMEND: Blank Space - Taylor Swift]
+[RECOMMEND: Anti-Hero - Taylor Swift]"
+
+Remember: Be helpful, friendly, and music-focused!"""
+        
+        self._initialize_chat()
     
-    def extract_song_recommendations(self, text: str) -> List[Dict[str, str]]:
-        """Extract song recommendations from chatbot response"""
+    def _initialize_chat(self):
+        """Initialize Gemini chat with system prompt"""
+        self.chat = self.model.start_chat(history=[])
+        try:
+            self.chat.send_message(self.system_prompt)
+        except Exception as e:
+            print(f"Warning: Could not set system prompt: {e}")
+    
+    def extract_play_command(self, response: str) -> Optional[Dict[str, str]]:
+        """
+        Extract PLAY command from response
+        Format: [PLAY: Song Name - Artist Name]
+        Returns: {"name": str, "artist": str, "autoplay": True} or None
+        """
+        pattern = r'\[PLAY:\s*([^\-]+?)\s*-\s*([^\]]+?)\s*\]'
+        match = re.search(pattern, response)
+        
+        if match:
+            return {
+                "name": match.group(1).strip(),
+                "artist": match.group(2).strip(),
+                "autoplay": True
+            }
+        return None
+    
+    def extract_recommendations(self, response: str) -> List[Dict[str, str]]:
+        """
+        Extract RECOMMEND commands from response
+        Format: [RECOMMEND: Song Name - Artist Name]
+        """
         songs = []
-        pattern = r'"([^"]+)"\s+by\s+([^,\.\n]+)'
-        matches = re.findall(pattern, text, re.IGNORECASE)
+        pattern = r'\[RECOMMEND:\s*([^\-]+?)\s*-\s*([^\]]+?)\s*\]'
+        matches = re.findall(pattern, response)
         
         for match in matches:
-            songs.append({"name": match[0].strip(), "artist": match[1].strip()})
+            songs.append({
+                "name": match[0].strip(),
+                "artist": match[1].strip()
+            })
         
         return songs
     
-    def extract_play_command(self, text: str) -> Optional[Dict[str, str]]:
-        """Extract PLAY command for auto-play"""
-        pattern = r'PLAY:\s*"([^"]+)"\s+by\s+([^,\.\n]+)'
-        match = re.search(pattern, text, re.IGNORECASE)
-        
-        if match:
-            return {"name": match.group(1).strip(), "artist": match.group(2).strip(), "autoplay": True}
-        
-        return None
-    
-    def build_conversation_history(self, conversation_history: List[dict], current_message: str) -> str:
-        """Build conversation history"""
-        history_text = ""
-        
-        for msg in conversation_history[-5:]:
-            role = msg.get('role', 'user')
-            content = msg.get('content', '')
-            
-            if role == 'user':
-                history_text += f"\nUser: {content}"
-            elif role == 'assistant':
-                history_text += f"\nAssistant: {content}"
-        
-        history_text += f"\nUser: {current_message}"
-        history_text += "\nAssistant:"
-        
-        return history_text
-    
-    async def chat(self, message: ChatMessage) -> Dict:
-        """Advanced chat with song recognition and auto-play"""
-        if not self.gemini:
-            raise HTTPException(status_code=503, detail="Gemini AI not configured")
-        
+    def chat_with_user(self, user_message: str) -> Dict:
+        """
+        Enhanced chat with better song detection
+        """
         try:
-            context = self.create_context(message.current_mood, message.user_id)
-            conversation = self.build_conversation_history(message.conversation_history, message.message)
-            full_prompt = f"{context}\n\n{conversation}"
+            # Send to Gemini
+            response = self.chat.send_message(user_message)
+            bot_response = response.text
             
-            response = self.gemini.generate_content(full_prompt)
-            response_text = response.text if hasattr(response, 'text') else str(response)
-            
-            # Extract play command for auto-play
-            play_command = self.extract_play_command(response_text)
-            
-            # Extract regular recommendations
-            recommended_songs = self.extract_song_recommendations(response_text)
-            
-            # Store conversation
-            if message.user_id not in self.conversation_contexts:
-                self.conversation_contexts[message.user_id] = []
-            
-            self.conversation_contexts[message.user_id].append({
-                'user': message.message,
-                'assistant': response_text,
-                'timestamp': datetime.now().isoformat()
+            # Add to history
+            self.conversation_history.append({
+                "role": "user",
+                "content": user_message
+            })
+            self.conversation_history.append({
+                "role": "assistant",
+                "content": bot_response
             })
             
+            # Check for PLAY command (direct playback)
+            play_command = self.extract_play_command(bot_response)
+            
+            # Extract recommendations
+            recommendations = self.extract_recommendations(bot_response)
+            
+            # Clean display text
+            display_text = bot_response
+            display_text = re.sub(r'\[PLAY:[^\]]+\]', '', display_text)
+            display_text = re.sub(r'\[RECOMMEND:[^\]]+\]', '', display_text)
+            display_text = re.sub(r'\n\s*\n+', '\n\n', display_text).strip()
+            
             return {
-                "response": response_text,
-                "timestamp": datetime.now().isoformat(),
-                "mood": message.current_mood,
-                "recommended_songs": recommended_songs,
-                "play_command": play_command,
-                "songs_count": len(recommended_songs)
+                "response": display_text,
+                "play_command": play_command,  # For direct playback
+                "recommended_songs": recommendations,  # For song buttons
+                "has_play_command": play_command is not None,
+                "has_recommendations": len(recommendations) > 0
             }
         
         except Exception as e:
-            print(f"❌ Chatbot error: {e}")
-            raise HTTPException(status_code=500, detail=f"Chatbot failed: {str(e)}")
+            print(f"Chatbot error: {e}")
+            return {
+                "response": "I apologize, but I'm having trouble right now. Please try again.",
+                "play_command": None,
+                "recommended_songs": [],
+                "has_play_command": False,
+                "has_recommendations": False,
+                "error": str(e)
+            }
     
-    def get_conversation_context(self, user_id: str, limit: int = 10) -> List[dict]:
-        """Get conversation context"""
-        if user_id in self.conversation_contexts:
-            return self.conversation_contexts[user_id][-limit:]
-        return []
+    def detect_intent(self, message: str) -> str:
+        """
+        Detect user intent from message
+        Returns: 'play', 'recommend', 'search', or 'chat'
+        """
+        message_lower = message.lower()
+        
+        # Play intent
+        if any(word in message_lower for word in ['play ', 'listen to', 'put on']):
+            return 'play'
+        
+        # Recommend intent
+        if any(word in message_lower for word in ['recommend', 'suggest', 'songs by', 'similar to']):
+            return 'recommend'
+        
+        # Search by lyrics/description
+        if any(word in message_lower for word in ['that song', 'goes like', 'lyrics']):
+            return 'search'
+        
+        return 'chat'
     
-    def clear_conversation_context(self, user_id: str):
-        """Clear conversation context"""
-        if user_id in self.conversation_contexts:
-            del self.conversation_contexts[user_id]
+    def reset_conversation(self):
+        """Reset conversation history"""
+        self.conversation_history = []
+        self._initialize_chat()
+        return {"message": "Conversation reset successfully"}
 
-chatbot = Chatbot()
+# Global instance
+chatbot = MusicChatbot()
