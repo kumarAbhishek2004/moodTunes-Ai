@@ -7,12 +7,14 @@ const Header = ({ onPlaySong }) => {
   const [searchResults, setSearchResults] = useState([])
   const [isSearching, setIsSearching] = useState(false)
 
+  const BACKEND_URL = 'https://abhishek2607-music-rec-backend.hf.space'
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) return
 
     setIsSearching(true)
     try {
-      const response = await axios.get('http://localhost:8000/search-music', {
+      const response = await axios.get(`${BACKEND_URL}/search-music`, {
         params: { query: searchQuery, limit: 10 }
       })
       setSearchResults(response.data.results || [])

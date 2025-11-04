@@ -11,13 +11,14 @@ const MusicPreferences = ({ mood, onPreferencesSet }) => {
   const [errors, setErrors] = useState({});
 
   const languages = ['Hindi', 'English'];
-
+  
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://abhishek2607-music-rec-backend.hf.space';
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
-
+  
     setIsSearching(true);
     try {
-      const response = await axios.get('http://localhost:8000/search-music', {
+      const response = await axios.get(`${BACKEND_URL}/search-music`, {
         params: { query: searchQuery }
       });
       setSearchResults(response.data.results || []);

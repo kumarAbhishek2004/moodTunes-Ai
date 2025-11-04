@@ -8,7 +8,7 @@ const MoodDetection = ({ onMoodDetected }) => {
   const [detectedMood, setDetectedMood] = useState(null)
   const [confidence, setConfidence] = useState(0)
   const webcamRef = useRef(null)
-
+  const BASE_URL = "https://abhishek2607-music-rec-backend.hf.space"
   const moods = [
     { name: 'Happy', emoji: '😊', gradient: 'from-yellow-500 to-orange-500' },
     { name: 'Sad', emoji: '😢', gradient: 'from-blue-500 to-indigo-600' },
@@ -33,7 +33,7 @@ const MoodDetection = ({ onMoodDetected }) => {
       formData.append('file', blob, 'image.jpg')
       
       // Send to backend
-      const response = await axios.post('http://localhost:8000/detect-mood', formData, {
+      const response = await axios.post(`${BASE_URL}/detect-mood`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       
@@ -54,7 +54,7 @@ const MoodDetection = ({ onMoodDetected }) => {
 
   const selectMoodManually = async (mood) => {
     try {
-      await axios.post('http://localhost:8000/detect-mood-manual', null, {
+      await axios.post(`${BASE_URL}/detect-mood-manual`, null, {
         params: { mood: mood.toLowerCase() }
       })
       

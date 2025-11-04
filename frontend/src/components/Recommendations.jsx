@@ -10,13 +10,14 @@ const Recommendations = ({ mood, preferences, onRecommendations }) => {
       fetchRecommendations();
     }
   }, [mood, preferences]);
-
+  
+  const BASE_URL = 'https://abhishek2607-music-rec-backend.hf.space';
   const fetchRecommendations = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await axios.post('http://localhost:8000/api/personalized-recommendations', {
+      const response = await axios.post(`${BASE_URL}/api/personalized-recommendations`, {
         mood: mood.mood || mood,
         user_id: 'default',
         limit: 20,

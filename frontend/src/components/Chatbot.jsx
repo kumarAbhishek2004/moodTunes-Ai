@@ -18,6 +18,8 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
+  const API_BASE_URL = "https://abhishek2607-music-rec-backend.hf.space";
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -37,7 +39,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
         playCommand: null
       }]);
       
-      const response = await axios.get('http://localhost:8000/search-song', {
+      const response = await axios.get(`${API_BASE_URL}/search-song`, {
         params: { name: songName, artist: artistName }
       });
       
@@ -57,7 +59,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
       setMessages(prev => prev.filter(msg => !msg.content.includes('🔍 Loading')));
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `✅ Now playing: "${song.name}" by ${song.artist}`,
+        content: `Now playing: "${song.name}" by ${song.artist}`,
         songs: [],
         playCommand: null
       }]);
@@ -131,7 +133,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
       const formData = new FormData();
       formData.append('file', audioBlob, 'recording.webm');
       
-      const response = await axios.post('http://localhost:8000/voice/transcribe', formData, {
+      const response = await axios.post(`${API_BASE_URL}/voice/transcribe`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
@@ -202,7 +204,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:8000/chat', {
+      const response = await axios.post(`${API_BASE_URL}/chat`, {
         message: textToSend,
         user_id: 'default',
         current_mood: currentMood?.mood || currentMood
