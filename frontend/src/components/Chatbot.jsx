@@ -19,7 +19,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
-  const API_BASE_URL = "http://127.0.0.1:8000";
+  const API_BASE_URL = "https://abhishek2607-music-rec-backend.hf.space";
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
