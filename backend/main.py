@@ -137,16 +137,57 @@ async def clear_chat_history(user_id: str):
     return {"message": f"Chat history cleared for user {user_id}", "timestamp": datetime.now().isoformat()}
 
 
-# ---------------------- Voice to Text ----------------------
+# ---------------------- Voice to Text (Enhanced) ----------------------
 @app.post("/voice/transcribe")
-async def transcribe_voice(file: UploadFile = File(...)):
-    transcript = await voice_to_text.transcribe_audio(file)
-    return {"transcript": transcript, "language": "en", "timestamp": datetime.now().isoformat()}
+async def transcribe_voice(file: UploadFile = File(...), language: str = "auto"):
+    """Enhanced transcription with auto language detection"""
+    transcript = await voice_to_text.transcribe_audio(file, language)
+    return {
+        "transcript": transcript,
+        "language": language,
+        "timestamp": datetime.now().isoformat(),
+        "status": "success"
+    }
 
 @app.post("/voice/transcribe-multilang")
 async def transcribe_voice_multilang(file: UploadFile = File(...), language: str = "en"):
+    """Transcribe with specific language (Hindi or English)"""
     transcript = await voice_to_text.transcribe_audio_hindi_english(file, language)
-    return {"transcript": transcript, "language": language, "timestamp": datetime.now().isoformat()}
+    return {
+        "transcript": transcript,
+        "language": language,
+        "timestamp": datetime.now().isoformat(),
+        "status": "success"
+    }
+
+@app.post("/voice/transcribe-detailed")
+async def transcribe_voice_detailed(file: UploadFile = File(...)):
+    """Get detailed transcription with language detection and confidence"""
+    result = await voice_to_text.transcribe_audio_multilang(file)
+    return {
+        **result,
+        "timestamp": datetime.now().isoformat(),
+        "status": "success"
+    }
+
+@app.post("/voice/transcribe-timestamps")
+async def transcribe_with_timestamps(file: UploadFile = File(...)):
+    """Transcribe with word-level timestamps"""
+    result = await voice_to_text.transcribe_with_timestamps(file)
+    return {
+        **result,
+        "timestamp": datetime.now().isoformat(),
+        "status": "success"
+    }
+
+@app.get("/voice/supported-languages")
+async def get_supported_languages():
+    """Get list of supported languages for transcription"""
+    return {
+        "languages": voice_to_text.get_supported_languages(),
+        "default": "auto",
+        "timestamp": datetime.now().isoformat()
+    }
 
 
 # ---------------------- Playlists ----------------------

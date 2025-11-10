@@ -14,11 +14,12 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState('auto');
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
-  const API_BASE_URL = "https://abhishek2607-music-rec-backend.hf.space";
+  const API_BASE_URL = "http://127.0.0.1:8000";
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -99,7 +100,20 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
       
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-        await transcribeAudio(audioBlob);
+        
+        // Check if audio has sufficient data
+        if (audioBlob.size < 1000) {
+          setMessages(prev => prev.filter(msg => msg.role !== 'system'));
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: '⚠️ Recording too short. Please speak for at least 1 second.',
+            songs: [],
+            playCommand: null
+          }]);
+        } else {
+          await transcribeAudio(audioBlob);
+        }
+        
         stream.getTracks().forEach(track => track.stop());
       };
       
@@ -108,7 +122,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
       
       setMessages(prev => [...prev, {
         role: 'system',
-        content: '🎤 Listening... Speak now',
+        content: '🎤 Listening... Speak now (supports English & Hindi)',
         songs: [],
         playCommand: null
       }]);
@@ -133,17 +147,32 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
       const formData = new FormData();
       formData.append('file', audioBlob, 'recording.webm');
       
-      const response = await axios.post(`${API_BASE_URL}/voice/transcribe`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      // Choose endpoint based on language selection
+      const endpoint = selectedLanguage === 'auto' 
+        ? `${API_BASE_URL}/voice/transcribe-detailed`
+        : `${API_BASE_URL}/voice/transcribe?language=${selectedLanguage}`;
       
-      const transcript = response.data.transcript;
+      const response = await axios.post(
+        endpoint,
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 30000 // 30 second timeout
+        }
+      );
+      
+      const { transcript, detected_language, language_name, confidence } = response.data;
+      
       setMessages(prev => prev.filter(msg => msg.role !== 'system'));
       setInput(transcript);
       
+      // Show language detection info
+      const languageInfo = language_name ? ` (${language_name})` : '';
+      const confidenceInfo = confidence ? ` [${Math.round(confidence * 100)}% confident]` : '';
+      
       setMessages(prev => [...prev, {
         role: 'user',
-        content: `🎤 ${transcript}`,
+        content: `🎤 ${transcript}${languageInfo}${confidenceInfo}`,
         songs: [],
         playCommand: null
       }]);
@@ -153,9 +182,20 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
     } catch (error) {
       console.error('Transcription error:', error);
       setMessages(prev => prev.filter(msg => msg.role !== 'system'));
+      
+      let errorMessage = 'Sorry, couldn\'t understand. Please try again.';
+      
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Transcription timeout. Please try with shorter audio.';
+      } else if (!navigator.onLine) {
+        errorMessage = 'No internet connection. Please check your network.';
+      }
+      
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Sorry, couldn\'t understand. Please try again.',
+        content: `❌ ${errorMessage}`,
         songs: [],
         playCommand: null
       }]);
@@ -348,14 +388,29 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
 
           {/* Input */}
           <div className="p-4 border-t border-gray-700 bg-gray-900/50 rounded-b-2xl">
+            <div className="mb-2 space-y-1">
             {currentMood && (
-              <div className="mb-2 flex items-center gap-2 text-xs">
+              <div className="flex items-center gap-2 text-xs">
                 <span className="text-gray-400">Current mood:</span>
                 <span className="px-2 py-1 bg-purple-500/20 border border-purple-500/30 text-purple-300 rounded-full capitalize">
                   {currentMood.mood || currentMood}
                 </span>
               </div>
             )}
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-gray-400">Voice language:</span>
+              <select
+                value={selectedLanguage}
+                onChange={(e) => setSelectedLanguage(e.target.value)}
+                className="px-2 py-1 bg-gray-800 border border-gray-700 text-gray-300 rounded text-xs focus:outline-none focus:border-purple-500"
+                disabled={isRecording || isTranscribing}
+              >
+                <option value="auto">Auto-detect</option>
+                <option value="en">English</option>
+                <option value="hi">Hindi</option>
+              </select>
+            </div>
+          </div>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -398,7 +453,17 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
               </button>
             </div>
             <p className="text-xs text-gray-500 mt-2 text-center">
-              Try: "Play Bohemian Rhapsody" or "Recommend workout music"
+              {isRecording ? (
+                <span className="text-red-400 font-semibold animate-pulse">
+                  🔴 Recording... Click to stop
+                </span>
+              ) : isTranscribing ? (
+                <span className="text-yellow-400 font-semibold">
+                  ⏳ Transcribing audio...
+                </span>
+              ) : (
+                "Try: \"Play Bohemian Rhapsody\" or \"Recommend workout music\""
+              )}
             </p>
           </div>
         </div>
