@@ -26,7 +26,12 @@ google-generativeai
 requests
 aiofiles
 
-
-
+# Voice
 deepgram-sdk
 
+# Database & Auth
+motor
+pymongo
+bcrypt
+python-jose[cryptography]
+passlib[bcrypt]

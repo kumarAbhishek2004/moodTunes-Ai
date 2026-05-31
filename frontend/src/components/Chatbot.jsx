@@ -1,30 +1,41 @@
 import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 
-const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: 'Hi! I\'m your music assistant. You can:\n• Say "play [song name]" for instant playback\n• Ask for recommendations\n• Search by artist, lyrics, or mood!',
-      songs: [],
-      playCommand: null
+const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) => {
+  // Load messages from sessionStorage on mount
+  const [messages, setMessages] = useState(() => {
+    const savedMessages = sessionStorage.getItem('chatbotMessages');
+    if (savedMessages) {
+      return JSON.parse(savedMessages);
     }
-  ]);
+    return [
+      {
+        role: 'assistant',
+        content: 'Hi! I\'m your music assistant. You can:\n• Say "play [song name]" for instant playback\n• Say "play playlist [name]" to play your playlists\n• Ask for recommendations\n• Search by artist, lyrics, or mood!',
+        songs: [],
+        playCommand: null,
+        playlistName: null
+      }
+    ];
+  });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState('auto');
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
-  const API_BASE_URL = "https://abhishek2607-music-rec-backend.hf.space";
+  const API_BASE_URL = "http://localhost:8000";
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Save messages to sessionStorage whenever they change
   useEffect(() => {
+    sessionStorage.setItem('chatbotMessages', JSON.stringify(messages));
     scrollToBottom();
   }, [messages]);
 
@@ -36,7 +47,8 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
         role: 'system',
         content: `🔍 Loading "${songName}"...`,
         songs: [],
-        playCommand: null
+        playCommand: null,
+        playlistName: null
       }]);
       
       const response = await axios.get(`${API_BASE_URL}/search-song`, {
@@ -51,7 +63,8 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
           role: 'assistant',
           content: `❌ "${songName}" found but no video available.`,
           songs: [],
-          playCommand: null
+          playCommand: null,
+          playlistName: null
         }]);
         return;
       }
@@ -61,7 +74,8 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
         role: 'assistant',
         content: `Now playing: "${song.name}" by ${song.artist}`,
         songs: [],
-        playCommand: null
+        playCommand: null,
+        playlistName: null
       }]);
       
       if (onPlaySong) {
@@ -77,7 +91,84 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
         role: 'assistant',
         content: `❌ ${errorMsg}`,
         songs: [],
-        playCommand: null
+        playCommand: null,
+        playlistName: null
+      }]);
+    }
+  };
+
+  const handlePlaylistClick = async (playlistName) => {
+    try {
+      console.log(`🎵 Loading playlist: "${playlistName}"`);
+      
+      setMessages(prev => [...prev, {
+        role: 'system',
+        content: `🎵 Loading playlist "${playlistName}"...`,
+        songs: [],
+        playCommand: null,
+        playlistName: null
+      }]);
+      
+      // Get auth token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setMessages(prev => prev.filter(msg => !msg.content.includes('🎵 Loading playlist')));
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: '⚠️ Please login to access your playlists.',
+          songs: [],
+          playCommand: null,
+          playlistName: null
+        }]);
+        return;
+      }
+      
+      const response = await axios.get(
+        `${API_BASE_URL}/api/playlists/by-name/${encodeURIComponent(playlistName)}`,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      
+      const playlist = response.data;
+      
+      if (!playlist.songs || playlist.songs.length === 0) {
+        setMessages(prev => prev.filter(msg => !msg.content.includes('🎵 Loading playlist')));
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `⚠️ Playlist "${playlistName}" is empty.`,
+          songs: [],
+          playCommand: null,
+          playlistName: null
+        }]);
+        return;
+      }
+      
+      setMessages(prev => prev.filter(msg => !msg.content.includes('🎵 Loading playlist')));
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `🎵 Now playing "${playlist.name}" (${playlist.songs.length} songs)`,
+        songs: [],
+        playCommand: null,
+        playlistName: null
+      }]);
+      
+      // Pass playlist to parent component to handle playback
+      if (onPlayPlaylist) {
+        onPlayPlaylist(playlist);
+      }
+      
+    } catch (error) {
+      console.error('❌ Playlist error:', error);
+      setMessages(prev => prev.filter(msg => !msg.content.includes('🎵 Loading playlist')));
+      
+      const errorMsg = error.response?.data?.detail || `Playlist "${playlistName}" not found`;
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `❌ ${errorMsg}`,
+        songs: [],
+        playCommand: null,
+        playlistName: null
       }]);
     }
   };
@@ -99,7 +190,21 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
       
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-        await transcribeAudio(audioBlob);
+        
+        // Check if audio has sufficient data
+        if (audioBlob.size < 1000) {
+          setMessages(prev => prev.filter(msg => msg.role !== 'system'));
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: '⚠️ Recording too short. Please speak for at least 1 second.',
+            songs: [],
+            playCommand: null,
+            playlistName: null
+          }]);
+        } else {
+          await transcribeAudio(audioBlob);
+        }
+        
         stream.getTracks().forEach(track => track.stop());
       };
       
@@ -108,9 +213,10 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
       
       setMessages(prev => [...prev, {
         role: 'system',
-        content: '🎤 Listening... Speak now',
+        content: '🎤 Listening... Speak now (supports English & Hindi)',
         songs: [],
-        playCommand: null
+        playCommand: null,
+        playlistName: null
       }]);
       
     } catch (error) {
@@ -133,19 +239,35 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
       const formData = new FormData();
       formData.append('file', audioBlob, 'recording.webm');
       
-      const response = await axios.post(`${API_BASE_URL}/voice/transcribe`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      // Choose endpoint based on language selection
+      const endpoint = selectedLanguage === 'auto' 
+        ? `${API_BASE_URL}/voice/transcribe-detailed`
+        : `${API_BASE_URL}/voice/transcribe?language=${selectedLanguage}`;
       
-      const transcript = response.data.transcript;
+      const response = await axios.post(
+        endpoint,
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 30000 // 30 second timeout
+        }
+      );
+      
+      const { transcript, detected_language, language_name, confidence } = response.data;
+      
       setMessages(prev => prev.filter(msg => msg.role !== 'system'));
       setInput(transcript);
       
+      // Show language detection info
+      const languageInfo = language_name ? ` (${language_name})` : '';
+      const confidenceInfo = confidence ? ` [${Math.round(confidence * 100)}% confident]` : '';
+      
       setMessages(prev => [...prev, {
         role: 'user',
-        content: `🎤 ${transcript}`,
+        content: `🎤 ${transcript}${languageInfo}${confidenceInfo}`,
         songs: [],
-        playCommand: null
+        playCommand: null,
+        playlistName: null
       }]);
       
       setTimeout(() => handleSendMessage(transcript), 500);
@@ -153,11 +275,23 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
     } catch (error) {
       console.error('Transcription error:', error);
       setMessages(prev => prev.filter(msg => msg.role !== 'system'));
+      
+      let errorMessage = 'Sorry, couldn\'t understand. Please try again.';
+      
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Transcription timeout. Please try with shorter audio.';
+      } else if (!navigator.onLine) {
+        errorMessage = 'No internet connection. Please check your network.';
+      }
+      
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Sorry, couldn\'t understand. Please try again.',
+        content: `❌ ${errorMessage}`,
         songs: [],
-        playCommand: null
+        playCommand: null,
+        playlistName: null
       }]);
     } finally {
       setIsTranscribing(false);
@@ -165,7 +299,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
   };
 
   const renderMessage = (message) => {
-    const { content, songs, playCommand } = message;
+    const { content, songs, playCommand, playlistName } = message;
     
     return (
       <div className="space-y-2">
@@ -210,8 +344,12 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
         current_mood: currentMood?.mood || currentMood
       });
 
+      // Handle playlist command
+      if (response.data.playlist_name) {
+        await handlePlaylistClick(response.data.playlist_name);
+      }
       // Handle direct play command
-      if (response.data.play_command && response.data.play_command.autoplay) {
+      else if (response.data.play_command && response.data.play_command.autoplay) {
         const cmd = response.data.play_command;
         await handleSongClick(cmd.name, cmd.artist);
       }
@@ -221,7 +359,8 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
         role: 'assistant',
         content: response.data.response || '',
         songs: response.data.recommended_songs || [],
-        playCommand: response.data.play_command || null
+        playCommand: response.data.play_command || null,
+        playlistName: response.data.playlist_name || null
       };
       
       setMessages(prev => [...prev, assistantMessage]);
@@ -232,7 +371,8 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
         role: 'assistant',
         content: error.response?.data?.detail || 'Connection error. Please try again.',
         songs: [],
-        playCommand: null
+        playCommand: null,
+        playlistName: null
       }]);
     } finally {
       setIsLoading(false);
@@ -246,7 +386,8 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
       role: 'user',
       content: input,
       songs: [],
-      playCommand: null
+      playCommand: null,
+      playlistName: null
     };
     setMessages(prev => [...prev, userMessage]);
     
@@ -348,21 +489,60 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
 
           {/* Input */}
           <div className="p-4 border-t border-gray-700 bg-gray-900/50 rounded-b-2xl">
-            {currentMood && (
-              <div className="mb-2 flex items-center gap-2 text-xs">
-                <span className="text-gray-400">Current mood:</span>
-                <span className="px-2 py-1 bg-purple-500/20 border border-purple-500/30 text-purple-300 rounded-full capitalize">
-                  {currentMood.mood || currentMood}
-                </span>
+            {/* Info Section */}
+            <div className="mb-3 space-y-2">
+              {currentMood && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-400">Current mood:</span>
+                  <span className="px-2 py-1 bg-purple-500/20 border border-purple-500/30 text-purple-300 rounded-full capitalize">
+                    {currentMood.mood || currentMood}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-400">Voice language:</span>
+                  <select
+                    value={selectedLanguage}
+                    onChange={(e) => setSelectedLanguage(e.target.value)}
+                    className="px-2 py-1 bg-gray-800 border border-gray-700 text-gray-300 rounded text-xs focus:outline-none focus:border-purple-500"
+                    disabled={isRecording || isTranscribing}
+                  >
+                    <option value="auto">Auto-detect</option>
+                    <option value="en">English</option>
+                    <option value="hi">Hindi</option>
+                  </select>
+                </div>
+                <button
+                  onClick={() => {
+                    sessionStorage.removeItem('chatbotMessages');
+                    setMessages([
+                      {
+                        role: 'assistant',
+                        content: 'Hi! I\'m your music assistant. You can:\n• Say "play [song name]" for instant playback\n• Say "play playlist [name]" to play your playlists\n• Ask for recommendations\n• Search by artist, lyrics, or mood!',
+                        songs: [],
+                        playCommand: null,
+                        playlistName: null
+                      }
+                    ]);
+                  }}
+                  className="flex items-center gap-1 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 hover:border-red-500/50 text-red-400 hover:text-red-300 rounded-lg transition-all text-xs"
+                  title="Clear chat history"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>Clear</span>
+                </button>
               </div>
-            )}
+            </div>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Play, recommend, or search..."
+                placeholder="Play song/playlist, recommend..."
                 className="flex-1 bg-gray-800 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 placeholder-gray-500 text-sm"
                 disabled={isLoading || isRecording}
               />
@@ -398,7 +578,17 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong }) => {
               </button>
             </div>
             <p className="text-xs text-gray-500 mt-2 text-center">
-              Try: "Play Bohemian Rhapsody" or "Recommend workout music"
+              {isRecording ? (
+                <span className="text-red-400 font-semibold animate-pulse">
+                  🔴 Recording... Click to stop
+                </span>
+              ) : isTranscribing ? (
+                <span className="text-yellow-400 font-semibold">
+                  ⏳ Transcribing audio...
+                </span>
+              ) : (
+                "Try: \"Play Bohemian Rhapsody\" or \"Play my Workout playlist\""
+              )}
             </p>
           </div>
         </div>

@@ -12,7 +12,7 @@ const MusicPreferences = ({ mood, onPreferencesSet }) => {
 
   const languages = ['Hindi', 'English'];
   
-  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://abhishek2607-music-rec-backend.hf.space';
+  const BACKEND_URL = 'http://localhost:8000';
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
   

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import AddToPlaylistButton from './AddToPlaylistButton';
 
 const MusicPlayer = ({ currentSong, queue, onPlaySong }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -134,6 +135,11 @@ const MusicPlayer = ({ currentSong, queue, onPlaySong }) => {
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Add to Playlist Button */}
+              <div className="mt-4 flex justify-center">
+                <AddToPlaylistButton song={currentSong} />
               </div>
 
               {/* Controls */}

@@ -823,58 +823,97 @@ class RecommendationEngine:
         }
     
     def search_music(self, query: str, limit: int = 10) -> List[Song]:
-        """Search music by name or artist with fuzzy matching"""
-        if not self.lastfm:
-            raise HTTPException(status_code=503, detail="Last.fm not configured")
-        
+        """Direct YouTube search - fast and no Last.fm dependency"""
         results = []
         try:
-            print(f"\n🔍 Searching for: '{query}'")
+            print(f"\n🔍 Direct YouTube Search: '{query}'")
             
-            # Try as artist first
+            # Search YouTube directly
+            youtube = Config.get_youtube()
+            if not youtube:
+                print("❌ YouTube API not configured")
+                raise HTTPException(status_code=503, detail="YouTube API not configured")
+            
             try:
-                corrected_artist = self.fuzzy_match_artist(query)
-                artist_songs = self.get_artist_top_tracks(corrected_artist, limit=min(5, limit))
-                if artist_songs:
-                    print(f"  ✓ Found as artist: {corrected_artist}")
-                    results.extend(artist_songs)
-            except Exception as e:
-                print(f"  ℹ️  Not an artist: {e}")
+                search_response = youtube.search().list(
+                    q=query,
+                    part='snippet',
+                    type='video',
+                    videoCategoryId='10',  # Music category
+                    maxResults=min(limit, 10)
+                ).execute()
+            except Exception as api_error:
+                print(f"❌ YouTube API error: {api_error}")
+                # Fallback to simple search without category filter
+                try:
+                    search_response = youtube.search().list(
+                        q=f"{query} song",
+                        part='snippet',
+                        type='video',
+                        maxResults=min(limit, 10)
+                    ).execute()
+                except Exception as e:
+                    print(f"❌ YouTube fallback failed: {e}")
+                    raise HTTPException(status_code=500, detail=f"YouTube search failed: {str(e)}")
             
-            # Search as track
-            if len(results) < limit:
-                search = self.lastfm.search_for_track('', query)
-                matches = search.get_next_page() if hasattr(search, 'get_next_page') else list(search)
-                
-                added = set(f"{s.name}-{s.artist}".lower() for s in results)
-                
-                for match in matches:
-                    if len(results) >= limit:
-                        break
-                    try:
-                        song = self.track_to_song(match, skip_youtube=False)
-                        key = f"{song.name}-{song.artist}".lower()
-                        if key not in added:
-                            results.append(song)
-                            added.add(key)
-                    except Exception as e:
-                        print(f"   Error processing match: {e}")
-                        continue
+            items = search_response.get('items', [])
+            print(f"  Found {len(items)} videos from YouTube")
             
-            # Ensure YouTube IDs
-            for song in results:
-                if not song.youtube_id and song.name and song.artist:
-                    try:
-                        youtube_id = music_player.get_youtube_id(f"{song.artist} {song.name}")
-                        if youtube_id:
-                            song.youtube_id = youtube_id
-                            song.preview_url = f"https://www.youtube.com/watch?v={youtube_id}"
-                    except Exception:
-                        pass
+            for i, item in enumerate(items, 1):
+                try:
+                    video_id = item['id']['videoId']
+                    snippet = item['snippet']
+                    title = snippet.get('title', 'Unknown')
+                    channel = snippet.get('channelTitle', 'Unknown Artist')
+                    
+                    # Try to extract artist and song name
+                    if ' - ' in title:
+                        parts = title.split(' - ', 1)
+                        artist = parts[0].strip()
+                        song_name = parts[1].strip()
+                    elif '|' in title:
+                        parts = title.split('|', 1)
+                        artist = parts[0].strip()
+                        song_name = parts[1].strip()
+                    else:
+                        artist = channel
+                        song_name = title
+                    
+                    # Clean up common suffixes
+                    for suffix in ['(Official Video)', '(Official Music Video)', '(Lyric Video)', 
+                                   '(Audio)', '[Official Video]', 'Official Video', 'Lyrics']:
+                        song_name = song_name.replace(suffix, '').strip()
+                    
+                    song = Song(
+                        id=f"yt_{video_id}",
+                        name=song_name[:100],  # Limit length
+                        artist=artist[:100],
+                        youtube_id=video_id,
+                        preview_url=f"https://www.youtube.com/watch?v={video_id}",
+                        lastfm_url=None,
+                        album=None,
+                        duration_ms=None,
+                        listeners=None,
+                        playcount=None,
+                        tags=[],
+                        audio_features={}
+                    )
+                    
+                    results.append(song)
+                    print(f"  [{i}] ✓ {song.name} by {song.artist}")
+                    
+                except Exception as e:
+                    print(f"  [{i}] ✗ Error processing item: {e}")
+                    continue
             
-            print(f"✅ Found {len(results)} results\n")
+            print(f"\n✅ Found {len(results)} results (instant!)\n")
+            
+        except HTTPException:
+            raise
         except Exception as e:
-            print(f"❌ Search error: {e}\n")
+            print(f"❌ YouTube search error: {e}\n")
+            import traceback
+            traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
         
         return results

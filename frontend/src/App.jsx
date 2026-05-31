@@ -1,103 +1,34 @@
-import { useState } from 'react'
-import Particles from './components/Particles'
-import Header from './components/Header'
-import Hero from './components/Hero'
-import StepCards from './components/StepCards'
-import MoodDetection from './components/MoodDetection'
-import PreferenceSelection from './components/PreferenceSelection'
-import Recommendations from './components/Recommendations'
-import MusicPlayer from './components/MusicPlayer'
-import Chatbot from './components/Chatbot'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { Provider } from 'react-redux'
+import { store } from './store/store'
+
+// Pages
+import HomePage from './pages/HomePage'
+import LoginPage from './pages/LoginPage'
+import PlaylistsPage from './pages/PlaylistsPage'
+import MoodDetectionPage from './pages/MoodDetectionPage'
+import PreferencesPage from './pages/PreferencesPage'
+import RecommendationsPage from './pages/RecommendationsPage'
+import MusicPlayerPage from './pages/MusicPlayerPage'
 
 function App() {
-  const [currentSection, setCurrentSection] = useState(1)
-  const [detectedMood, setDetectedMood] = useState(null)
-  const [userPreferences, setUserPreferences] = useState(null)
-  const [recommendations, setRecommendations] = useState([])
-  const [currentSong, setCurrentSong] = useState(null)
-  const [isChatbotOpen, setIsChatbotOpen] = useState(false)
-
-  const handleMoodDetected = (mood) => {
-    setDetectedMood(mood)
-    setCurrentSection(2)
-  }
-
-  const handlePreferencesSet = (preferences) => {
-    setUserPreferences(preferences)
-    setCurrentSection(3)
-  }
-
-  const handleRecommendations = (songs) => {
-    setRecommendations(songs)
-    setCurrentSection(4)
-    if (songs.length > 0) {
-      setCurrentSong(songs[0])
-    }
-  }
-
-  const handlePlaySong = (song) => {
-    setCurrentSong(song)
-    
-    if (currentSection !== 4 && song) {
-      setCurrentSection(4)
-      
-      if (!recommendations.find(s => s.id === song.id)) {
-        setRecommendations(prev => [song, ...prev])
-      }
-    }
-  }
-
   return (
-    <div className="min-h-screen">
-      <Particles />
-      
-      <div className="relative z-10">
-        <Header onPlaySong={handlePlaySong} />
-        
-        <div className="container mx-auto px-6 py-12">
-          <Hero />
+    <Provider store={store}>
+      <Router>
+        <Routes>
+          {/* Main Flow */}
+          <Route path="/" element={<HomePage />} />
+          <Route path="/mood-detection" element={<MoodDetectionPage />} />
+          <Route path="/preferences" element={<PreferencesPage />} />
+          <Route path="/recommendations" element={<RecommendationsPage />} />
+          <Route path="/player" element={<MusicPlayerPage />} />
           
-          <StepCards 
-            currentSection={currentSection}
-            onSectionChange={setCurrentSection}
-          />
-
-          {currentSection === 1 && (
-            <MoodDetection onMoodDetected={handleMoodDetected} />
-          )}
-
-          {currentSection === 2 && (
-            <PreferenceSelection
-              mood={detectedMood}
-              onPreferencesSet={handlePreferencesSet}
-            />
-          )}
-
-          {currentSection === 3 && (
-            <Recommendations
-              mood={detectedMood}
-              preferences={userPreferences}
-              onRecommendations={handleRecommendations}
-            />
-          )}
-
-          {currentSection === 4 && (
-            <MusicPlayer
-              currentSong={currentSong}
-              queue={recommendations}
-              onPlaySong={handlePlaySong}
-            />
-          )}
-        </div>
-      </div>
-
-      <Chatbot
-        isOpen={isChatbotOpen}
-        onToggle={() => setIsChatbotOpen(!isChatbotOpen)}
-        currentMood={detectedMood}
-        onPlaySong={handlePlaySong}
-      />
-    </div>
+          {/* Auth & Features */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/playlists" element={<PlaylistsPage />} />
+        </Routes>
+      </Router>
+    </Provider>
   )
 }
 
