@@ -14,7 +14,7 @@ const Header = ({ onPlaySong }) => {
   const navigate = useNavigate()
   const { user, isAuthenticated } = useSelector((state) => state.auth)
 
-  const BACKEND_URL = 'http://localhost:8000'
+  const BACKEND_URL = import.meta.env.VITE_API_URL || 'https://abhishek2607-music-rec-backend.hf.space'
 
   const handleLogout = () => {
     dispatch(logout())
