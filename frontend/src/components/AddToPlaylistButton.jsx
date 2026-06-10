@@ -10,7 +10,7 @@ const AddToPlaylistButton = ({ song, compact = false }) => {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   
   const { isAuthenticated } = useSelector((state) => state.auth);
-  const API_URL = 'http://localhost:8000';
+  const API_URL = 'https://abhishek2607-music-rec-backend.hf.space';
 
   useEffect(() => {
     if (isOpen && isAuthenticated) {

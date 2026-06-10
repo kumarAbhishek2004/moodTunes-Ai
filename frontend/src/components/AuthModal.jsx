@@ -11,7 +11,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const API_URL = 'http://localhost:8000';
+  const API_URL = 'https://abhishek2607-music-rec-backend.hf.space';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
