@@ -14,7 +14,7 @@ const PlaylistDetailModal = ({ isOpen, onClose, playlist, onUpdate }) => {
   const playerRef = useRef(null);
   const checkIntervalRef = useRef(null);
 
-  const API_URL = 'http://localhost:8000';
+  const API_URL = 'https://abhishek2607-music-rec-backend.hf.space';
 
   useEffect(() => {
     if (playlist?.songs) {
