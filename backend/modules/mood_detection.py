@@ -13,7 +13,7 @@ import asyncio
 from fastapi import HTTPException, UploadFile
 from typing import Dict, List
 
-from .models import MoodDetectionResponse
+from .models import MoodDetectionResponse, EmotionScore
 
 # Do NOT import DeepFace at module import time (lazy load)
 DeepFace = None
@@ -96,13 +96,32 @@ class MoodDetector:
 
             emotion = result.get("dominant_emotion", "neutral")
             emotion_scores = result.get("emotion", {}) or {}
-            confidence = float(emotion_scores.get(emotion, 0.0))
+            confidence = round(float(emotion_scores.get(emotion, 0.0)), 1)
             mood = MoodDetector.EMOTION_TO_MOOD.get(emotion, "calm")
+
+            # Extract full 7-emotion breakdown and mood distribution
+            breakdown = []
+            all_emotions = {}
+            mood_distribution = {}
+
+            for emo, raw_score in sorted(emotion_scores.items(), key=lambda x: float(x[1]), reverse=True):
+                score = round(float(raw_score), 1)
+                all_emotions[emo] = score
+                mapped_mood = MoodDetector.EMOTION_TO_MOOD.get(emo, "calm")
+                breakdown.append(EmotionScore(
+                    emotion=emo,
+                    score=score,
+                    mood=mapped_mood
+                ))
+                mood_distribution[mapped_mood] = round(mood_distribution.get(mapped_mood, 0.0) + score, 1)
 
             return MoodDetectionResponse(
                 emotion=emotion,
                 mood=mood,
-                confidence=confidence
+                confidence=confidence,
+                all_emotions=all_emotions,
+                mood_distribution=mood_distribution,
+                breakdown=breakdown
             )
 
         except Exception as e:

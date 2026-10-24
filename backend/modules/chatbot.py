@@ -13,6 +13,7 @@ from groq import Groq
 from typing import List, Dict, Optional
 import json
 import re
+from .models import MoodDetectionResponse, EmotionScore
 
 load_dotenv()
 
@@ -388,6 +389,89 @@ Remember: Always use standard ASCII hyphen (-) between song and artist. Always i
             return 'search'
         
         return 'chat'
+
+    def analyze_text_mood(self, text: str) -> MoodDetectionResponse:
+        """
+        Analyze narrative text or voice transcript and return multi-class emotion distribution.
+        Supported moods: happy, calm, energetic, sad, intense.
+        """
+        prompt = (
+            f'You are an affective computing emotion analyzer.\\n'
+            f'Analyze the emotional state from this text: "{text}"\\n'
+            f'Map percentages across these 5 moods: happy, calm, energetic, sad, intense.\\n'
+            f'The percentages must sum to 100. Respond ONLY with raw JSON in this format (no markdown):\\n'
+            f'{{"dominant_mood": "calm", "confidence": 70.0, "explanation": "brief reason", '
+            f'"mood_distribution": {{"calm": 70.0, "sad": 20.0, "energetic": 10.0, "happy": 0.0, "intense": 0.0}}}}'
+        )
+        
+        parsed = None
+        try:
+            if self.current_provider == 'gemini' and self.model:
+                res = self.model.generate_content(prompt)
+                raw_text = res.text.strip()
+                raw_text = re.sub(r'^```json\s*', '', raw_text, flags=re.IGNORECASE)
+                raw_text = re.sub(r'\s*```$', '', raw_text)
+                parsed = json.loads(raw_text)
+            elif self.groq_client:
+                res = self.groq_client.chat.completions.create(
+                    model=self._get_best_groq_model(),
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.2
+                )
+                raw_text = res.choices[0].message.content.strip()
+                raw_text = re.sub(r'^```json\s*', '', raw_text, flags=re.IGNORECASE)
+                raw_text = re.sub(r'\s*```$', '', raw_text)
+                parsed = json.loads(raw_text)
+        except Exception as e:
+            print(f"⚠️ LLM emotion parsing fallback triggered: {e}")
+
+        # Heuristic fallback if LLM is unavailable or unparseable
+        if not parsed or not isinstance(parsed, dict) or "mood_distribution" not in parsed:
+            lower = text.lower()
+            if any(w in lower for w in ["sad", "cry", "lonely", "broken", "depressed", "low", "pain"]):
+                dom = "sad"
+                dist = {"sad": 75.0, "calm": 25.0}
+            elif any(w in lower for w in ["calm", "relax", "sleep", "chill", "peace", "study", "lofi", "lo-fi"]):
+                dom = "calm"
+                dist = {"calm": 75.0, "happy": 25.0}
+            elif any(w in lower for w in ["gym", "workout", "run", "fast", "party", "dance", "club", "hype"]):
+                dom = "energetic"
+                dist = {"energetic": 75.0, "intense": 25.0}
+            elif any(w in lower for w in ["angry", "rage", "metal", "fight", "furious"]):
+                dom = "intense"
+                dist = {"intense": 75.0, "energetic": 25.0}
+            else:
+                dom = "happy"
+                dist = {"happy": 70.0, "calm": 30.0}
+            
+            parsed = {
+                "dominant_mood": dom,
+                "confidence": 75.0,
+                "explanation": f"Detected {dom} sentiment from text keywords.",
+                "mood_distribution": dist
+            }
+
+        dom_mood = parsed.get("dominant_mood", "calm").lower()
+        conf = float(parsed.get("confidence", 70.0))
+        dist = parsed.get("mood_distribution", {})
+        
+        breakdown = []
+        for m, score in sorted(dist.items(), key=lambda x: float(x[1]), reverse=True):
+            if float(score) > 0:
+                breakdown.append(EmotionScore(
+                    emotion=m,
+                    score=float(score),
+                    mood=m
+                ))
+
+        return MoodDetectionResponse(
+            emotion=dom_mood,
+            mood=dom_mood,
+            confidence=conf,
+            all_emotions={k: float(v) for k, v in dist.items()},
+            mood_distribution={k: float(v) for k, v in dist.items()},
+            breakdown=breakdown
+        )
 
     def reset_conversation(self):
         """Reset conversation history"""

@@ -6,10 +6,18 @@ from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict
 
 # Mood
+class EmotionScore(BaseModel):
+    emotion: str
+    score: float
+    mood: str
+
 class MoodDetectionResponse(BaseModel):
     emotion: str
     mood: str
     confidence: float
+    all_emotions: Dict[str, float] = Field(default_factory=dict)
+    mood_distribution: Dict[str, float] = Field(default_factory=dict)
+    breakdown: List[EmotionScore] = Field(default_factory=list)
 
 # Song
 class Song(BaseModel):
@@ -29,11 +37,13 @@ class Song(BaseModel):
 # Recommendation requests
 class RecommendationRequest(BaseModel):
     mood: str
+    mood_distribution: Optional[Dict[str, float]] = None
     user_id: str = "default"
     limit: int = 20
 
 class PersonalizedRecommendationRequest(BaseModel):
     mood: str
+    mood_distribution: Optional[Dict[str, float]] = None
     user_id: str = "default"
     limit: int = 20
     preferences: Dict = Field(default_factory=dict)

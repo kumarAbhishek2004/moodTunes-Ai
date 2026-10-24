@@ -22,6 +22,7 @@ from modules.config import Config
 # Models
 from modules.models import (
     MoodDetectionResponse,
+    EmotionScore,
     Song,
     RecommendationRequest,
     PersonalizedRecommendationRequest,
@@ -123,11 +124,29 @@ async def detect_mood(file: UploadFile = File(...)):
     return await MoodDetector.detect_from_image(file)
 
 
-@app.post("/detect-mood-manual")
+@app.post("/detect-mood-manual", response_model=MoodDetectionResponse)
 async def detect_mood_manual(mood: str):
-    if not MoodDetector.validate_mood(mood):
+    clean_mood = mood.lower()
+    if not MoodDetector.validate_mood(clean_mood):
         raise HTTPException(status_code=400, detail="Invalid mood")
-    return {"mood": mood.lower(), "message": f"Mood set to {mood.lower()}"}
+    return MoodDetectionResponse(
+        emotion=clean_mood,
+        mood=clean_mood,
+        confidence=100.0,
+        all_emotions={clean_mood: 100.0},
+        mood_distribution={clean_mood: 100.0},
+        breakdown=[
+            EmotionScore(emotion=clean_mood, score=100.0, mood=clean_mood)
+        ]
+    )
+
+
+@app.post("/api/detect-mood-text", response_model=MoodDetectionResponse)
+async def detect_mood_from_text(payload: Dict[str, str]):
+    text = payload.get("text", "")
+    if not text:
+        raise HTTPException(status_code=400, detail="Text cannot be empty")
+    return await asyncio.to_thread(chatbot.analyze_text_mood, text)
 
 
 @app.get("/moods")
