@@ -1,6 +1,8 @@
 """
 Recommendation Engine - With Fuzzy Artist Matching & Better Error Handling
 """
+import os
+import json
 from typing import List, Optional, Dict
 from .config import Config
 from .models import Song, PersonalizedRecommendationRequest, RecommendationRequest
@@ -26,6 +28,51 @@ class RecommendationEngine:
         self.user_favorites = defaultdict(list)
         self._track_cache = {}
         self._artist_cache = {}  # Cache for fuzzy-matched artist names
+        self.seeds = self._load_seeds()
+
+    def _load_seeds(self) -> dict:
+        """Load curated seed bank for offline/zero-error resilience"""
+        seed_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache", "curated_seeds.json")
+        if os.path.exists(seed_path):
+            try:
+                with open(seed_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"⚠️ Could not load curated_seeds.json: {e}")
+        return {}
+
+    def get_seed_recommendations(self, mood: str, language: str = 'english', limit: int = 20) -> List[Song]:
+        """Resilient fallback when Last.fm is down or returns empty results"""
+        mood_key = (mood or 'happy').lower()
+        if mood_key not in self.seeds:
+            mood_key = 'happy'
+        
+        lang_key = (language or 'english').lower()
+        if lang_key not in ['hindi', 'english']:
+            lang_key = 'english'
+        
+        pool = self.seeds.get(mood_key, {}).get(lang_key, [])
+        if len(pool) < limit:
+            alt_lang = 'hindi' if lang_key == 'english' else 'english'
+            pool = pool + self.seeds.get(mood_key, {}).get(alt_lang, [])
+        
+        songs = []
+        for item in pool[:limit]:
+            name = item.get("name", "")
+            artist = item.get("artist", "")
+            yid = item.get("youtube_id", "")
+            song_id = f"{artist}_{name}".replace(" ", "_").lower()[:50]
+            songs.append(Song(
+                id=song_id,
+                name=name,
+                artist=artist,
+                lastfm_url=f"https://www.last.fm/music/{urllib.parse.quote(artist)}/_/{urllib.parse.quote(name)}",
+                youtube_id=yid,
+                preview_url=f"https://www.youtube.com/watch?v={yid}" if yid else None,
+                tags=item.get("tags", []),
+                audio_features={"mood_match": mood_key, "is_curated": True}
+            ))
+        return songs
     
     def fuzzy_match_artist(self, artist_query: str) -> str:
             """
@@ -469,19 +516,31 @@ class RecommendationEngine:
         - 4: Similar + Mood
         - Rest: Fallback
         """
-        if not self.lastfm:
-            raise HTTPException(status_code=503, detail="Last.fm not configured")
-        
         mood = (request.mood or '').lower()
         if not MoodDetector.validate_mood(mood):
             raise HTTPException(status_code=400, detail=f"Invalid mood: {mood}")
         
         prefs = request.preferences or {}
-        
         language = (prefs.get('language') or '').lower()
         if language not in ['hindi', 'english']:
-            print(f"⚠️  Invalid language '{language}', defaulting to 'english'")
             language = 'english'
+
+        if not self.lastfm:
+            print(f"⚠️ Last.fm not configured. Using curated seeds for mood '{mood}'.")
+            seed_songs = self.get_seed_recommendations(mood, language, request.limit)
+            return {
+                "songs": seed_songs,
+                "mood": mood,
+                "language": language,
+                "total": len(seed_songs),
+                "distribution": {"curated_seeds": len(seed_songs)},
+                "is_fallback": True,
+                "preferences_applied": {
+                    "language": language,
+                    "favorite_singers": [],
+                    "favorite_songs_count": 0
+                }
+            }
         
         favorite_songs = (
             prefs.get('favoriteSongs') or 
@@ -674,22 +733,15 @@ class RecommendationEngine:
         print(f"└─ Cat 4 (Fallback): {cat4_count}")
         print(f"{'='*60}\n")
         
-        print("🎬 Fetching YouTube IDs...")
-        youtube_success = 0
-        for i, song in enumerate(final, 1):
-            if not song.youtube_id and song.name and song.artist:
-                try:
-                    youtube_id = music_player.get_youtube_id(f"{song.artist} {song.name}")
-                    if youtube_id:
-                        song.youtube_id = youtube_id
-                        song.preview_url = f"https://www.youtube.com/watch?v={youtube_id}"
-                        youtube_success += 1
-                except Exception:
-                    pass
-            if i % 5 == 0:
-                print(f"   Processed {i}/{len(final)}...")
-        
-        print(f"✅ YouTube IDs: {youtube_success}/{len(final)}\n")
+        print("🎬 Fetching YouTube IDs in parallel...")
+        final = music_player.resolve_youtube_ids_parallel(final, max_workers=10)
+        youtube_success = sum(1 for s in final if getattr(s, 'youtube_id', None))
+        print(f"✅ YouTube IDs resolved in parallel: {youtube_success}/{len(final)}\n")
+
+        # Fallback to seeds if no songs were retrieved from Last.fm
+        if len(final) == 0:
+            print("⚠️ Zero tracks found from Last.fm. Falling back to curated seed bank.")
+            final = self.get_seed_recommendations(mood, language, request.limit)
         
         for s in final:
             try:
@@ -729,13 +781,21 @@ class RecommendationEngine:
         }
     
     def get_basic_recommendations(self, request: RecommendationRequest) -> Dict:
-        """Basic mood-based recommendations"""
-        if not self.lastfm:
-            raise HTTPException(status_code=503, detail="Last.fm not configured")
-        
+        """Basic mood-based recommendations with parallel resolution & resilient fallback"""
         mood = (request.mood or '').lower()
         if not MoodDetector.validate_mood(mood):
             raise HTTPException(status_code=400, detail=f"Invalid mood: {mood}")
+
+        if not self.lastfm:
+            print(f"⚠️ Last.fm not configured. Using curated seeds for mood '{mood}'.")
+            seed_songs = self.get_seed_recommendations(mood, "english", request.limit)
+            return {
+                "songs": seed_songs,
+                "mood": mood,
+                "total": len(seed_songs),
+                "is_fallback": True
+            }
+        
         mood_tags = MoodDetector.get_mood_tags(mood)
         recommendations = []
         added = set()
@@ -754,15 +814,13 @@ class RecommendationEngine:
                     added.add(key)
                     recommendations.append(s)
         
-        for song in recommendations:
-            if not song.youtube_id and song.name and song.artist:
-                try:
-                    youtube_id = music_player.get_youtube_id(f"{song.artist} {song.name}")
-                    if youtube_id:
-                        song.youtube_id = youtube_id
-                        song.preview_url = f"https://www.youtube.com/watch?v={youtube_id}"
-                except Exception:
-                    pass
+        print("🎬 Fetching YouTube IDs in parallel for basic recommendations...")
+        recommendations = music_player.resolve_youtube_ids_parallel(recommendations, max_workers=10)
+
+        # Fallback to seeds if empty
+        if len(recommendations) == 0:
+            print("⚠️ Zero tracks found from Last.fm. Falling back to curated seed bank.")
+            recommendations = self.get_seed_recommendations(mood, "english", request.limit)
         
         print(f"✅ Retrieved {len(recommendations)} songs\n")
         

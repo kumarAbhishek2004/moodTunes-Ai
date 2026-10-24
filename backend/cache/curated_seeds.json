@@ -1,0 +1,380 @@
+{
+  "happy": {
+    "hindi": [
+      {
+        "name": "Kesariya",
+        "artist": "Arijit Singh",
+        "youtube_id": "BddP6PYo2gs",
+        "tags": ["bollywood", "happy", "romantic", "pop"]
+      },
+      {
+        "name": "Ilahi",
+        "artist": "Arijit Singh",
+        "youtube_id": "fdubeMFwuGs",
+        "tags": ["bollywood", "happy", "travel", "upbeat"]
+      },
+      {
+        "name": "Badtameez Dil",
+        "artist": "Benny Dayal",
+        "youtube_id": "II2EO3Nw4m0",
+        "tags": ["bollywood", "dance", "happy", "party"]
+      },
+      {
+        "name": "Subhanallah",
+        "artist": "Sreerama Chandra",
+        "youtube_id": "6wNFJuVvH2I",
+        "tags": ["bollywood", "happy", "melodic"]
+      },
+      {
+        "name": "Gallan Goodiyaan",
+        "artist": "Yashita Sharma",
+        "youtube_id": "jCEdTq3j-0U",
+        "tags": ["bollywood", "dance", "happy", "celebration"]
+      },
+      {
+        "name": "Sooraj Ki Baahon Mein",
+        "artist": "Dominique Cerejo",
+        "youtube_id": "9T-Zbmskhyc",
+        "tags": ["bollywood", "happy", "feel-good", "sunshine"]
+      }
+    ],
+    "english": [
+      {
+        "name": "Happy",
+        "artist": "Pharrell Williams",
+        "youtube_id": "ZbZSe6N_BXs",
+        "tags": ["pop", "happy", "funk", "feel-good"]
+      },
+      {
+        "name": "Can't Stop the Feeling!",
+        "artist": "Justin Timberlake",
+        "youtube_id": "ru0K8uYEZWw",
+        "tags": ["pop", "dance", "happy", "disco"]
+      },
+      {
+        "name": "Uptown Funk",
+        "artist": "Mark Ronson ft. Bruno Mars",
+        "youtube_id": "OPf0YbXqDm0",
+        "tags": ["funk", "pop", "happy", "groove"]
+      },
+      {
+        "name": "Good Life",
+        "artist": "OneRepublic",
+        "youtube_id": "jZhQOvv8hLk",
+        "tags": ["pop", "rock", "happy", "anthem"]
+      },
+      {
+        "name": "Walking On Sunshine",
+        "artist": "Katrina and the Waves",
+        "youtube_id": "iPUmE-tne5U",
+        "tags": ["pop", "80s", "happy", "retro"]
+      },
+      {
+        "name": "Sugar",
+        "artist": "Maroon 5",
+        "youtube_id": "09R8_2nJtjg",
+        "tags": ["pop", "happy", "dance", "love"]
+      }
+    ]
+  },
+  "calm": {
+    "hindi": [
+      {
+        "name": "Iktara",
+        "artist": "Tochi Raina, Kavita Seth",
+        "youtube_id": "fSS_R91Nimw",
+        "tags": ["bollywood", "calm", "acoustic", "soulful"]
+      },
+      {
+        "name": "Tum Se Hi",
+        "artist": "Mohit Chauhan",
+        "youtube_id": "Cb6wuzOurPc",
+        "tags": ["bollywood", "calm", "romantic", "peaceful"]
+      },
+      {
+        "name": "Kun Faya Kun",
+        "artist": "A.R. Rahman, Mohit Chauhan",
+        "youtube_id": "T94PHkuydcw",
+        "tags": ["sufi", "calm", "spiritual", "peace"]
+      },
+      {
+        "name": "Phir Le Aya Dil",
+        "artist": "Arijit Singh",
+        "youtube_id": "uyd6E_r_F1I",
+        "tags": ["bollywood", "calm", "ghazal", "slow"]
+      },
+      {
+        "name": "Kabira",
+        "artist": "Tochi Raina, Rekha Bhardwaj",
+        "youtube_id": "jHNNMj5bNQw",
+        "tags": ["bollywood", "calm", "acoustic", "soothing"]
+      },
+      {
+        "name": "Sham",
+        "artist": "Amit Trivedi, Nikhil D'Souza",
+        "youtube_id": "z2f_wHqZlFs",
+        "tags": ["bollywood", "calm", "indie", "sunset"]
+      }
+    ],
+    "english": [
+      {
+        "name": "Weightless",
+        "artist": "Marconi Union",
+        "youtube_id": "UfcAVejslrU",
+        "tags": ["ambient", "calm", "relaxation", "lo-fi"]
+      },
+      {
+        "name": "Holocene",
+        "artist": "Bon Iver",
+        "youtube_id": "TWcyIpul8OE",
+        "tags": ["indie", "folk", "calm", "acoustic"]
+      },
+      {
+        "name": "Banana Pancakes",
+        "artist": "Jack Johnson",
+        "youtube_id": "OkyrIRyrRdY",
+        "tags": ["acoustic", "calm", "chill", "morning"]
+      },
+      {
+        "name": "River Flows In You",
+        "artist": "Yiruma",
+        "youtube_id": "7maJOI3QMu0",
+        "tags": ["piano", "classical", "calm", "peaceful"]
+      },
+      {
+        "name": "Sunrise",
+        "artist": "Norah Jones",
+        "youtube_id": "fd02pGJx0s0",
+        "tags": ["jazz", "calm", "acoustic", "soothing"]
+      },
+      {
+        "name": "Bloom",
+        "artist": "The Paper Kites",
+        "youtube_id": "8inJtTG_BLk",
+        "tags": ["indie", "folk", "calm", "acoustic"]
+      }
+    ]
+  },
+  "sad": {
+    "hindi": [
+      {
+        "name": "Channa Mereya",
+        "artist": "Arijit Singh",
+        "youtube_id": "284Ov7ysmfA",
+        "tags": ["bollywood", "sad", "heartbreak", "emotional"]
+      },
+      {
+        "name": "Agar Tum Saath Ho",
+        "artist": "Alka Yagnik, Arijit Singh",
+        "youtube_id": "sK7riqg2mr4",
+        "tags": ["bollywood", "sad", "emotional", "deep"]
+      },
+      {
+        "name": "Tujhe Bhula Diya",
+        "artist": "Mohit Chauhan, Shekhar Ravjiani",
+        "youtube_id": "8ZzW3e1gPcg",
+        "tags": ["bollywood", "sad", "heartbreak", "rock"]
+      },
+      {
+        "name": "Hamari Adhuri Kahani",
+        "artist": "Arijit Singh",
+        "youtube_id": "f3FFOBrMmdg",
+        "tags": ["bollywood", "sad", "slow", "melancholy"]
+      },
+      {
+        "name": "Jag Soona Soona Lage",
+        "artist": "Rahat Fateh Ali Khan, Richa Sharma",
+        "youtube_id": "X_gehCLwlMo",
+        "tags": ["bollywood", "sad", "grief", "soul"]
+      },
+      {
+        "name": "Mera Yaar",
+        "artist": "Dhvani Bhanushali",
+        "youtube_id": "3M8r1_E42Gg",
+        "tags": ["bollywood", "sad", "acoustic"]
+      }
+    ],
+    "english": [
+      {
+        "name": "Someone Like You",
+        "artist": "Adele",
+        "youtube_id": "hLQl3WQQoQ0",
+        "tags": ["pop", "sad", "piano", "heartbreak"]
+      },
+      {
+        "name": "Fix You",
+        "artist": "Coldplay",
+        "youtube_id": "k4V3Mo61fJM",
+        "tags": ["rock", "sad", "healing", "anthem"]
+      },
+      {
+        "name": "Skinny Love",
+        "artist": "Bon Iver",
+        "youtube_id": "ssdgFoHLwnk",
+        "tags": ["folk", "sad", "acoustic", "indie"]
+      },
+      {
+        "name": "All I Want",
+        "artist": "Kodaline",
+        "youtube_id": "mtf7hC17IBM",
+        "tags": ["indie", "sad", "heartbreak", "emotional"]
+      },
+      {
+        "name": "The Night We Met",
+        "artist": "Lord Huron",
+        "youtube_id": "KtlgYxa6BMU",
+        "tags": ["indie", "sad", "nostalgia", "haunting"]
+      },
+      {
+        "name": "Stay With Me",
+        "artist": "Sam Smith",
+        "youtube_id": "pB-5XG-DbAA",
+        "tags": ["soul", "sad", "vocal", "gospel"]
+      }
+    ]
+  },
+  "energetic": {
+    "hindi": [
+      {
+        "name": "Malhari",
+        "artist": "Vishal Dadlani",
+        "youtube_id": "l_MyUGq7pgs",
+        "tags": ["bollywood", "energetic", "dance", "power"]
+      },
+      {
+        "name": "Kar Gayi Chull",
+        "artist": "Badshah, Neha Kakkar",
+        "youtube_id": "NTHz9ephYTw",
+        "tags": ["bollywood", "party", "energetic", "club"]
+      },
+      {
+        "name": "Zinda",
+        "artist": "Siddharth Mahadevan",
+        "youtube_id": "qXbLz-U22K8",
+        "tags": ["bollywood", "rock", "energetic", "workout"]
+      },
+      {
+        "name": "Dhoom Machale",
+        "artist": "Sunidhi Chauhan",
+        "youtube_id": "2uUmHTgT65I",
+        "tags": ["bollywood", "energetic", "dance", "action"]
+      },
+      {
+        "name": "Apna Time Aayega",
+        "artist": "Ranveer Singh",
+        "youtube_id": "jFGK9fgd7iI",
+        "tags": ["hip-hop", "energetic", "rap", "hustle"]
+      },
+      {
+        "name": "Chaiyya Chaiyya",
+        "artist": "Sukhwinder Singh, Sapna Awasthi",
+        "youtube_id": "Pxsd0cOCf00",
+        "tags": ["bollywood", "energetic", "classic", "rhythm"]
+      }
+    ],
+    "english": [
+      {
+        "name": "Can't Hold Us",
+        "artist": "Macklemore & Ryan Lewis",
+        "youtube_id": "2zNSgSzhBf8",
+        "tags": ["hip-hop", "energetic", "workout", "anthem"]
+      },
+      {
+        "name": "Till I Collapse",
+        "artist": "Eminem",
+        "youtube_id": "ytQ5CYE1VZw",
+        "tags": ["rap", "energetic", "workout", "motivation"]
+      },
+      {
+        "name": "Levels",
+        "artist": "Avicii",
+        "youtube_id": "_ovdm2yX4MA",
+        "tags": ["edm", "energetic", "party", "house"]
+      },
+      {
+        "name": "Titanium",
+        "artist": "David Guetta ft. Sia",
+        "youtube_id": "JRfuAukYTKg",
+        "tags": ["edm", "energetic", "pop", "power"]
+      },
+      {
+        "name": "Stronger",
+        "artist": "Kanye West",
+        "youtube_id": "PsO6ZnUZI0g",
+        "tags": ["hip-hop", "energetic", "electronic", "anthem"]
+      },
+      {
+        "name": "Believer",
+        "artist": "Imagine Dragons",
+        "youtube_id": "7wtfhZwyrcc",
+        "tags": ["rock", "energetic", "power", "drums"]
+      }
+    ]
+  },
+  "intense": {
+    "hindi": [
+      {
+        "name": "Aarambh Hai Prachand",
+        "artist": "Piyush Mishra",
+        "youtube_id": "r6Smsz_FVfc",
+        "tags": ["folk-rock", "intense", "motivation", "power"]
+      },
+      {
+        "name": "Sadda Haq",
+        "artist": "Mohit Chauhan",
+        "youtube_id": "p9DQINKZxWE",
+        "tags": ["rock", "intense", "rebellion", "guitar"]
+      },
+      {
+        "name": "Jee Karda",
+        "artist": "Divya Kumar",
+        "youtube_id": "VA8P_pZOC5U",
+        "tags": ["bollywood", "intense", "anger", "revenge"]
+      },
+      {
+        "name": "Bhaag D.K. Bose",
+        "artist": "Ram Sampath",
+        "youtube_id": "n8_H_KspE-E",
+        "tags": ["punk-rock", "intense", "fast", "grunge"]
+      },
+      {
+        "name": "Dhan Te Nan",
+        "artist": "Sukhwinder Singh, Vishal Dadlani",
+        "youtube_id": "b18k8D21tP8",
+        "tags": ["bollywood", "intense", "thriller", "energy"]
+      }
+    ],
+    "english": [
+      {
+        "name": "In the End",
+        "artist": "Linkin Park",
+        "youtube_id": "eVTXPUF4Oz4",
+        "tags": ["rock", "intense", "nu-metal", "anthem"]
+      },
+      {
+        "name": "Radioactive",
+        "artist": "Imagine Dragons",
+        "youtube_id": "ktvTqknDobU",
+        "tags": ["alt-rock", "intense", "bass", "power"]
+      },
+      {
+        "name": "Numb",
+        "artist": "Linkin Park",
+        "youtube_id": "kXYiU_JCYtU",
+        "tags": ["rock", "intense", "emotional", "power"]
+      },
+      {
+        "name": "Killing In The Name",
+        "artist": "Rage Against The Machine",
+        "youtube_id": "bWXazVhlyxQ",
+        "tags": ["metal", "intense", "punk", "rebellion"]
+      },
+      {
+        "name": "Seven Nation Army",
+        "artist": "The White Stripes",
+        "youtube_id": "0J2QdDbelmY",
+        "tags": ["garage-rock", "intense", "riff", "anthem"]
+      }
+    ]
+  }
+}
