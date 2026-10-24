@@ -70,7 +70,9 @@ class RecommendationEngine:
                 youtube_id=yid,
                 preview_url=f"https://www.youtube.com/watch?v={yid}" if yid else None,
                 tags=item.get("tags", []),
-                audio_features={"mood_match": mood_key, "is_curated": True}
+                audio_features={"mood_match": mood_key, "is_curated": True},
+                mood_match=mood_key,
+                ai_explanation=f"Verified top track curated for {mood_key.capitalize()} listening."
             ))
         return songs
     
@@ -569,179 +571,207 @@ class RecommendationEngine:
             if corrected:
                 corrected_singers.append(corrected)
         
+        # Parse multi-class mood distribution
+        raw_dist = request.mood_distribution or {mood: 100.0}
+        valid_mood_dist = {}
+        for m, score in raw_dist.items():
+            clean_m = m.lower()
+            if MoodDetector.validate_mood(clean_m) and float(score) > 0:
+                valid_mood_dist[clean_m] = float(score)
+        if not valid_mood_dist:
+            valid_mood_dist = {mood: 100.0}
+
+        # Anti-Repetition Filter: Track recently recommended songs
+        recent_song_keys = set()
+        if request.user_id in self.user_history:
+            for h in self.user_history[request.user_id][-30:]:
+                s_obj = h.get('song') or {}
+                s_name = s_obj.get('name') if isinstance(s_obj, dict) else getattr(s_obj, 'name', '')
+                s_artist = s_obj.get('artist') if isinstance(s_obj, dict) else getattr(s_obj, 'artist', '')
+                if s_name and s_artist:
+                    recent_song_keys.add(f"{s_name}-{s_artist}".lower())
+
         print(f"\n{'='*60}")
-        print(f"🎵 PERSONALIZED RECOMMENDATIONS")
+        print(f"🎵 PERSONALIZED MULTI-CLASS RECOMMENDATIONS")
         print(f"{'='*60}")
         print(f"Language: {language.upper()}")
-        print(f"Mood: {mood.upper()}")
+        print(f"Primary Mood: {mood.upper()}")
+        print(f"Mood Distribution: {valid_mood_dist}")
         print(f"Favorite Singers (original): {favorite_singers}")
         print(f"Favorite Singers (corrected): {corrected_singers}")
         print(f"Favorite Songs: {favorite_songs}")
-        print(f"Target: {request.limit} songs")
+        print(f"Recent History Exclusions: {len(recent_song_keys)} tracks")
+        print(f"Target Limit: {request.limit} songs")
         print(f"{'='*60}\n")
         
-        all_songs = []
-        added = set()
-        
-        mood_tags = MoodDetector.get_mood_tags(mood)
         language_tag = self.LANGUAGE_TO_TAG.get(language, 'pop')
         
-        print(f"🏷️  Tags - Language: '{language_tag}', Mood: {mood_tags}\n")
+        # Categorized buckets for round-robin interleaving
+        bucket_artist = []
+        bucket_mood = []
+        bucket_similar = []
+        bucket_fallback = []
+        added = set()
         
-        cat1_count = 0
-        cat2_count = 0
-        cat3_count = 0
-        cat4_count = 0
+        TARGET_CAT1 = 8  # Artist favorites
+        TARGET_CAT2 = 6  # Weighted multi-mood tags
+        TARGET_CAT3 = 4  # Similar tracks
         
-        TARGET_CAT1 = 8
-        TARGET_CAT2 = 4
-        TARGET_CAT3 = 4
-        
+        # -------------------------------------------------------------
         # CATEGORY 1: Artist + Mood + Language
+        # -------------------------------------------------------------
         if corrected_singers:
-            print(f"📌 CATEGORY 1: Getting {TARGET_CAT1} songs (Artist + Mood + Language)")
+            print(f"📌 CATEGORY 1: Getting up to {TARGET_CAT1} songs (Artist + Mood)")
             songs_per_artist = max(3, TARGET_CAT1 // len(corrected_singers[:3]))
             
             for singer in corrected_singers[:3]:
-                if cat1_count >= TARGET_CAT1:
+                if len(bucket_artist) >= TARGET_CAT1:
                     break
-                    
-                print(f"  🎤 Artist: {singer}")
-                artist_songs = self.get_artist_top_tracks(
-                    singer, 
-                    limit=songs_per_artist * 2,
-                    mood_filter=mood
-                )
-                
+                artist_songs = self.get_artist_top_tracks(singer, limit=songs_per_artist * 2, mood_filter=mood)
                 for song in artist_songs:
-                    if cat1_count >= TARGET_CAT1:
+                    if len(bucket_artist) >= TARGET_CAT1:
                         break
                     key = f"{song.name}-{song.artist}".lower()
                     if key not in added:
                         added.add(key)
-                        all_songs.append(song)
-                        cat1_count += 1
-                        print(f"     ✓ Added: {song.name}")
-            
-            print(f"  ✅ Category 1: {cat1_count}/{TARGET_CAT1} songs\n")
+                        song.mood_match = mood
+                        song.ai_explanation = f"Matches your {mood.capitalize()} mood & preference for {song.artist}."
+                        bucket_artist.append(song)
+            print(f"  ✅ Category 1: {len(bucket_artist)} songs\n")
         else:
-            print(f"⏭️  CATEGORY 1: Skipped (no artists)\n")
+            print(f"⏭️  CATEGORY 1: Skipped (no favorite artists)\n")
         
-        # CATEGORY 2: Language + Mood
-        print(f"📌 CATEGORY 2: Getting {TARGET_CAT2} songs (Language + Mood)")
+        # -------------------------------------------------------------
+        # CATEGORY 2: Weighted Multi-Class Mood Allocation
+        # -------------------------------------------------------------
+        print(f"📌 CATEGORY 2: Getting {TARGET_CAT2} songs (Weighted Multi-Mood Spectrum)")
+        total_dist_weight = sum(valid_mood_dist.values()) or 1.0
         
-        combined_pool = []
-        lang_songs = self.get_top_tracks_by_tag(language_tag, limit=20)
-        combined_pool.extend(lang_songs)
-        print(f"  🌍 Retrieved {len(lang_songs)} {language} songs")
-        
-        if mood_tags:
-            for mood_tag in mood_tags[:2]:
-                mood_songs = self.get_top_tracks_by_tag(mood_tag, limit=15)
-                combined_pool.extend(mood_songs)
-                print(f"  😊 Retrieved {len(mood_songs)} for '{mood_tag}'")
-        
-        for song in combined_pool:
-            if cat2_count >= TARGET_CAT2:
-                break
-            key = f"{song.name}-{song.artist}".lower()
-            if key not in added:
-                added.add(key)
-                all_songs.append(song)
-                cat2_count += 1
-        
-        print(f"  ✅ Category 2: {cat2_count}/{TARGET_CAT2} songs\n")
-        
-        # CATEGORY 3: Similar + Mood
-        if favorite_songs:
-            print(f"📌 CATEGORY 3: Getting {TARGET_CAT3} songs (Similar + Mood)")
-            songs_per_favorite = max(2, TARGET_CAT3 // len(favorite_songs[:3]))
+        for m_name, m_weight in sorted(valid_mood_dist.items(), key=lambda x: x[1], reverse=True):
+            mood_quota = max(1, round(TARGET_CAT2 * (m_weight / total_dist_weight)))
+            m_tags = MoodDetector.get_mood_tags(m_name)
             
-            for fav_song in favorite_songs[:3]:
-                if cat3_count >= TARGET_CAT3:
-                    break
-                
-                # Parse with fuzzy matching
-                parsed = self.parse_song_string(fav_song, corrected_singers)
-                song_name = parsed['name']
-                artist_name = parsed['artist']
-                
-                if not artist_name:
-                    print(f"  ⚠️  Skipping '{song_name}' - no artist")
-                    continue
-                
-                print(f"  ❤️  Finding similar to: '{song_name}' by {artist_name}")
-                similar_songs = self.get_similar_tracks(
-                    song_name, 
-                    artist_name, 
-                    limit=songs_per_favorite * 2,
-                    mood_filter=mood
-                )
-                
-                for song in similar_songs:
-                    if cat3_count >= TARGET_CAT3:
-                        break
-                    key = f"{song.name}-{song.artist}".lower()
-                    if key not in added:
-                        added.add(key)
-                        all_songs.append(song)
-                        cat3_count += 1
-                        print(f"     ✓ Added: {song.name}")
+            mood_pool = []
+            lang_pool = self.get_top_tracks_by_tag(language_tag, limit=15)
+            mood_pool.extend(lang_pool)
             
-            print(f"  ✅ Category 3: {cat3_count}/{TARGET_CAT3} songs\n")
-        else:
-            print(f"⏭️  CATEGORY 3: Skipped (no favorite songs)\n")
-        
-        # CATEGORY 4: Fallback
-        remaining = request.limit - len(all_songs)
-        
-        if remaining > 0:
-            print(f"📌 CATEGORY 4: FALLBACK - Need {remaining} more")
+            for t in m_tags[:2]:
+                mood_pool.extend(self.get_top_tracks_by_tag(t, limit=15))
             
-            fallback_pool = []
-            lang_fallback = self.get_top_tracks_by_tag(language_tag, limit=remaining * 3)
-            fallback_pool.extend(lang_fallback)
-            print(f"  🌍 Retrieved {len(lang_fallback)} {language} songs")
-            
-            if mood_tags:
-                for mood_tag in mood_tags:
-                    mood_fallback = self.get_top_tracks_by_tag(mood_tag, limit=remaining * 2)
-                    fallback_pool.extend(mood_fallback)
-                    print(f"  😊 Retrieved {len(mood_fallback)} for '{mood_tag}'")
-            
-            for song in fallback_pool:
-                if len(all_songs) >= request.limit:
+            collected_for_this_mood = 0
+            for song in mood_pool:
+                if collected_for_this_mood >= mood_quota or len(bucket_mood) >= TARGET_CAT2:
                     break
                 key = f"{song.name}-{song.artist}".lower()
                 if key not in added:
                     added.add(key)
-                    all_songs.append(song)
-                    cat4_count += 1
+                    conf_pct = int(round(m_weight))
+                    song.mood_match = m_name
+                    song.ai_explanation = f"Curated for your {conf_pct}% {m_name.capitalize()} emotional spectrum."
+                    bucket_mood.append(song)
+                    collected_for_this_mood += 1
+                    
+        print(f"  ✅ Category 2: {len(bucket_mood)} songs across {len(valid_mood_dist)} moods\n")
+        
+        # -------------------------------------------------------------
+        # CATEGORY 3: Similar Tracks + Mood
+        # -------------------------------------------------------------
+        if favorite_songs:
+            print(f"📌 CATEGORY 3: Getting {TARGET_CAT3} songs (Similar Tracks)")
+            songs_per_fav = max(2, TARGET_CAT3 // len(favorite_songs[:3]))
             
-            print(f"  ✅ Category 4: {cat4_count}/{remaining} songs\n")
+            for fav_song in favorite_songs[:3]:
+                if len(bucket_similar) >= TARGET_CAT3:
+                    break
+                parsed = self.parse_song_string(fav_song, corrected_singers)
+                s_name, s_artist = parsed['name'], parsed['artist']
+                if not s_artist:
+                    continue
+                similar_songs = self.get_similar_tracks(s_name, s_artist, limit=songs_per_fav * 2, mood_filter=mood)
+                for song in similar_songs:
+                    if len(bucket_similar) >= TARGET_CAT3:
+                        break
+                    key = f"{song.name}-{song.artist}".lower()
+                    if key not in added:
+                        added.add(key)
+                        song.mood_match = mood
+                        song.ai_explanation = f"Curated because it shares emotional resonance with '{fav_song}'."
+                        bucket_similar.append(song)
+            print(f"  ✅ Category 3: {len(bucket_similar)} songs\n")
+        else:
+            print(f"⏭️  CATEGORY 3: Skipped (no favorite songs)\n")
+            
+        # -------------------------------------------------------------
+        # CATEGORY 4: Fallback Pool
+        # -------------------------------------------------------------
+        total_collected = len(bucket_artist) + len(bucket_mood) + len(bucket_similar)
+        needed = request.limit - total_collected
         
-        all_songs.sort(key=lambda x: (x.playcount or 0), reverse=True)
-        final = all_songs[:request.limit]
+        if needed > 0:
+            print(f"📌 CATEGORY 4: Fallback Pool (Need {needed} more)")
+            fallback_tags = MoodDetector.get_mood_tags(mood)
+            fb_pool = self.get_top_tracks_by_tag(language_tag, limit=needed * 2)
+            for t in fallback_tags:
+                fb_pool.extend(self.get_top_tracks_by_tag(t, limit=needed))
+                
+            for song in fb_pool:
+                if len(bucket_fallback) >= needed:
+                    break
+                key = f"{song.name}-{song.artist}".lower()
+                if key not in added:
+                    added.add(key)
+                    song.mood_match = mood
+                    song.ai_explanation = f"Selected for smooth musical transition in your {mood.capitalize()} mix."
+                    bucket_fallback.append(song)
+            print(f"  ✅ Category 4: {len(bucket_fallback)} songs\n")
+            
+        # -------------------------------------------------------------
+        # ROUND-ROBIN INTERLEAVING & ANTI-REPETITION BALANCING
+        # -------------------------------------------------------------
+        final = []
+        final_keys = set()
+        deferred_recent = []
         
-        print(f"\n{'='*60}")
-        print(f"✅ FINAL DISTRIBUTION")
-        print(f"{'='*60}")
-        print(f"Total: {len(final)}/{request.limit}")
-        print(f"├─ Cat 1 (Artist+Mood+Lang): {cat1_count}")
-        print(f"├─ Cat 2 (Language+Mood): {cat2_count}")
-        print(f"├─ Cat 3 (Similar+Mood): {cat3_count}")
-        print(f"└─ Cat 4 (Fallback): {cat4_count}")
-        print(f"{'='*60}\n")
+        candidate_buckets = [bucket_artist, bucket_mood, bucket_similar, bucket_fallback]
         
+        while len(final) < request.limit and any(candidate_buckets):
+            for bucket in candidate_buckets:
+                if len(final) >= request.limit:
+                    break
+                while bucket:
+                    candidate = bucket.pop(0)
+                    ckey = f"{candidate.name}-{candidate.artist}".lower()
+                    if ckey not in final_keys:
+                        # If listened to recently, defer to give fresh songs priority
+                        if ckey in recent_song_keys and len(bucket) > 0:
+                            deferred_recent.append(candidate)
+                            continue
+                        final_keys.add(ckey)
+                        final.append(candidate)
+                        break
+        
+        # Backfill with deferred tracks if still under limit
+        while len(final) < request.limit and deferred_recent:
+            candidate = deferred_recent.pop(0)
+            ckey = f"{candidate.name}-{candidate.artist}".lower()
+            if ckey not in final_keys:
+                final_keys.add(ckey)
+                final.append(candidate)
+                
+        # -------------------------------------------------------------
+        # RESILIENT SEED FALLBACK (IF LAST.FM RETURNED ZERO TRACKS)
+        # -------------------------------------------------------------
+        if len(final) == 0:
+            print("⚠️ Zero tracks found from Last.fm. Falling back to curated seed bank.")
+            final = self.get_seed_recommendations(mood, language, request.limit)
+            
+        # -------------------------------------------------------------
+        # PARALLEL YOUTUBE RESOLUTION (⚡ 10X SPEEDUP)
+        # -------------------------------------------------------------
         print("🎬 Fetching YouTube IDs in parallel...")
         final = music_player.resolve_youtube_ids_parallel(final, max_workers=10)
         youtube_success = sum(1 for s in final if getattr(s, 'youtube_id', None))
         print(f"✅ YouTube IDs resolved in parallel: {youtube_success}/{len(final)}\n")
-
-        # Fallback to seeds if no songs were retrieved from Last.fm
-        if len(final) == 0:
-            print("⚠️ Zero tracks found from Last.fm. Falling back to curated seed bank.")
-            final = self.get_seed_recommendations(mood, language, request.limit)
         
         for s in final:
             try:
@@ -762,16 +792,22 @@ class RecommendationEngine:
                     'source': 'personalized'
                 })
         
+        mood_spectrum_counts = {}
+        for s in final:
+            m_tag = getattr(s, 'mood_match', mood) or mood
+            mood_spectrum_counts[m_tag] = mood_spectrum_counts.get(m_tag, 0) + 1
+
         return {
             "songs": final,
             "mood": mood,
             "language": language,
             "total": len(final),
             "distribution": {
-                "artist_based": cat1_count,
-                "language_mood": cat2_count,
-                "similar_tracks": cat3_count,
-                "fallback": cat4_count
+                "artist_based": len(bucket_artist),
+                "language_mood": len(bucket_mood),
+                "similar_tracks": len(bucket_similar),
+                "fallback": len(bucket_fallback),
+                "mood_spectrum": mood_spectrum_counts
             },
             "preferences_applied": {
                 "language": language,
@@ -812,6 +848,8 @@ class RecommendationEngine:
                 key = f"{s.name}-{s.artist}".lower()
                 if key not in added and len(recommendations) < request.limit:
                     added.add(key)
+                    s.mood_match = mood
+                    s.ai_explanation = f"Matches your {mood.capitalize()} vibe."
                     recommendations.append(s)
         
         print("🎬 Fetching YouTube IDs in parallel for basic recommendations...")

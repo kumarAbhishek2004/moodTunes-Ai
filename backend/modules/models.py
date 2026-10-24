@@ -33,6 +33,8 @@ class Song(BaseModel):
     playcount: Optional[int] = None
     tags: List[str] = Field(default_factory=list)
     audio_features: Dict = Field(default_factory=dict)
+    ai_explanation: Optional[str] = None
+    mood_match: Optional[str] = None
 
 # Recommendation requests
 class RecommendationRequest(BaseModel):
