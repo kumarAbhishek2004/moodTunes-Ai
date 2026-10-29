@@ -16,9 +16,17 @@ const MOOD_GLOW_MAP = {
     primary: 'rgba(0, 242, 254, 0.18)',    // Mint / Electric Cyan
     secondary: 'rgba(16, 185, 129, 0.14)', // Emerald
   },
+  focus: {
+    primary: 'rgba(16, 185, 129, 0.20)',   // Emerald Teal
+    secondary: 'rgba(6, 182, 212, 0.14)',  // Deep Cyan
+  },
   energetic: {
     primary: 'rgba(249, 115, 22, 0.22)',   // Electric Orange
     secondary: 'rgba(234, 179, 8, 0.15)',  // Bright Gold
+  },
+  romantic: {
+    primary: 'rgba(236, 72, 153, 0.22)',   // Rose / Magenta
+    secondary: 'rgba(244, 63, 94, 0.15)',  // Coral
   },
   sad: {
     primary: 'rgba(37, 99, 235, 0.20)',    // Deep Sapphire
