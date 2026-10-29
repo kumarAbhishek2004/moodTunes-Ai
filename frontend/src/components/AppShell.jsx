@@ -1,5 +1,11 @@
 import { useSelector } from 'react-redux';
+import { useLocation } from 'react-router-dom';
 import PersistentAudioEngine from './PersistentAudioEngine';
+import Sidebar from './Sidebar';
+import TopHeader from './TopHeader';
+import BottomPlayer from './BottomPlayer';
+import QueueDrawer from './QueueDrawer';
+import MobileNav from './MobileNav';
 
 const MOOD_GLOW_MAP = {
   happy: {
@@ -26,25 +32,28 @@ const MOOD_GLOW_MAP = {
 
 /**
  * AppShell
- * Root layout wrapper maintaining persistent playback engine and ambient background mesh.
+ * Root desktop/mobile streaming platform navigation shell with persistent audio playback.
  */
 const AppShell = ({ children }) => {
+  const location = useLocation();
   const activeMood = useSelector((state) => state.audio.activeMood) || 'happy';
   const glow = MOOD_GLOW_MAP[activeMood.toLowerCase()] || MOOD_GLOW_MAP.happy;
 
+  const isAuthRoute = location.pathname === '/login';
+
   return (
-    <div className="relative min-h-screen bg-obsidian-950 text-slate-100 overflow-x-hidden selection:bg-cyan selection:text-obsidian-950">
-      {/* 1. Root Persistent Audio Engine (Never unmounts across route changes) */}
+    <div className="relative min-h-screen bg-obsidian-950 text-slate-100 overflow-x-hidden selection:bg-cyan selection:text-obsidian-950 font-sans">
+      {/* 1. Root Persistent Audio Engine (Uninterrupted across client-side routes) */}
       <PersistentAudioEngine />
 
-      {/* 2. Dynamic Ambient Background Mesh (Morphs smoothly as mood changes) */}
+      {/* 2. Dynamic Ambient Background Mesh (Morphs smoothly as emotional state updates) */}
       <div
         aria-hidden="true"
         className="fixed inset-0 pointer-events-none transition-all duration-1000 ease-out z-0"
         style={{
           background: `
-            radial-gradient(circle at 15% 20%, ${glow.primary} 0%, transparent 45%),
-            radial-gradient(circle at 85% 75%, ${glow.secondary} 0%, transparent 50%),
+            radial-gradient(circle at 18% 22%, ${glow.primary} 0%, transparent 48%),
+            radial-gradient(circle at 82% 78%, ${glow.secondary} 0%, transparent 52%),
             #060B10
           `,
         }}
@@ -56,10 +65,37 @@ const AppShell = ({ children }) => {
         className="fixed inset-0 pointer-events-none z-0 opacity-20 bg-[radial-gradient(rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:24px_24px]"
       />
 
-      {/* 3. Main Content Container */}
-      <div className="relative z-10 flex flex-col min-h-screen">
-        {children}
-      </div>
+      {/* 3. Streaming Shell Layout */}
+      {isAuthRoute ? (
+        <div className="relative z-10 min-h-screen flex items-center justify-center">
+          {children}
+        </div>
+      ) : (
+        <div className="relative z-10 flex min-h-screen">
+          {/* Desktop Fixed Sidebar */}
+          <Sidebar />
+
+          {/* Main Content Area (Offset by sidebar width on desktop) */}
+          <div className="flex-1 flex flex-col md:pl-64 min-w-0">
+            {/* Top Bar with Personalized Greeting & Context */}
+            <TopHeader />
+
+            {/* Scrollable Page Body (pb-32 ensures player dock never covers content) */}
+            <main className="flex-1 pb-32 md:pb-28">
+              {children}
+            </main>
+          </div>
+
+          {/* Persistent Bottom Player Dock */}
+          <BottomPlayer />
+
+          {/* Slide-out Queue Drawer */}
+          <QueueDrawer />
+
+          {/* Mobile Bottom Navigation Dock */}
+          <MobileNav />
+        </div>
+      )}
     </div>
   );
 };

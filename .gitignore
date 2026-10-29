@@ -1,5 +1,8 @@
 # Project Roadmaps & Scratch Notes
 task.md
+*.bat
+check_vercel.py
+test_*.py
 
 # Environments & Secrets
 .env

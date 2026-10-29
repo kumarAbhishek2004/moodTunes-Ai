@@ -201,6 +201,48 @@ export const audioSlice = createSlice({
       const nextIdx = (modes.indexOf(state.repeatMode) + 1) % modes.length;
       state.repeatMode = modes[nextIdx];
     },
+
+    playSongAtIndex: (state, action) => {
+      const index = action.payload;
+      if (index >= 0 && index < state.queue.length) {
+        state.currentIndex = index;
+        state.currentSong = state.queue[index];
+        state.currentTime = 0;
+        state.isPlaying = true;
+        if (state.currentSong?.mood_match) {
+          state.activeMood = state.currentSong.mood_match.toLowerCase();
+        }
+      }
+    },
+
+    removeFromQueue: (state, action) => {
+      const index = action.payload;
+      if (index >= 0 && index < state.queue.length) {
+        state.queue.splice(index, 1);
+        if (state.currentIndex >= state.queue.length) {
+          state.currentIndex = Math.max(0, state.queue.length - 1);
+        }
+        if (state.queue.length === 0) {
+          state.currentSong = null;
+          state.isPlaying = false;
+        } else if (state.currentIndex === index) {
+          state.currentSong = state.queue[state.currentIndex];
+        }
+        try {
+          localStorage.setItem('recommendations', JSON.stringify(state.queue));
+        } catch (e) {}
+      }
+    },
+
+    clearQueue: (state) => {
+      state.queue = [];
+      state.currentSong = null;
+      state.currentIndex = 0;
+      state.isPlaying = false;
+      try {
+        localStorage.removeItem('recommendations');
+      } catch (e) {}
+    },
   },
 });
 
@@ -223,6 +265,9 @@ export const {
   toggleQueue,
   toggleShuffle,
   cycleRepeatMode,
+  playSongAtIndex,
+  removeFromQueue,
+  clearQueue,
 } = audioSlice.actions;
 
 export default audioSlice.reducer;
