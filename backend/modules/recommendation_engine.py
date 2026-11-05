@@ -1,9 +1,11 @@
 """
-Recommendation Engine - With Fuzzy Artist Matching & Better Error Handling
+Recommendation Engine - High-Performance Parallelized Engine with Microsecond Caching
 """
 import os
 import json
+import time
 from typing import List, Optional, Dict
+from concurrent.futures import ThreadPoolExecutor, wait
 from .config import Config
 from .models import Song, PersonalizedRecommendationRequest, RecommendationRequest
 from .music_player import music_player
@@ -28,6 +30,8 @@ class RecommendationEngine:
         self.user_favorites = defaultdict(list)
         self._track_cache = {}
         self._artist_cache = {}  # Cache for fuzzy-matched artist names
+        self._tag_cache = {}     # In-memory TTL cache for tag -> (timestamp, songs)
+        self._artist_tracks_cache = {} # In-memory TTL cache for artist -> (timestamp, songs)
         self.seeds = self._load_seeds()
 
     def _load_seeds(self) -> dict:
@@ -77,77 +81,35 @@ class RecommendationEngine:
         return songs
     
     def fuzzy_match_artist(self, artist_query: str) -> str:
-            """
-            Dynamic fuzzy matching without hardcoding:
-            1. Cache check
-            2. Last.fm artist search (primary)
-            3. Last.fm track search (if artist search fails)
-            4. String similarity matching
-            """
-            if not artist_query or not self.lastfm:
-                return artist_query
-            
-            artist_query = artist_query.strip()
-            cache_key = artist_query.lower()
-            
-            # Check cache
-            if cache_key in self._artist_cache:
-                cached = self._artist_cache[cache_key]
-                print(f"  ✓ Cache: '{artist_query}' → '{cached}'")
-                return cached
-            
-            try:
-                # STRATEGY 1: Direct Last.fm artist search
-                print(f"  🔍 Searching Last.fm artist: '{artist_query}'")
-                search_results = self.lastfm.search_for_artist(artist_query)
-                matches = search_results.get_next_page() if hasattr(search_results, 'get_next_page') else list(search_results)
-                
-                if matches and len(matches) > 0:
-                    best_match = matches[0]
-                    corrected_name = best_match.name if hasattr(best_match, 'name') else str(best_match)
-                    
-                    # Cache and return
-                    self._artist_cache[cache_key] = corrected_name
-                    
-                    if corrected_name.lower() != artist_query.lower():
-                        print(f"  ✓ Last.fm corrected: '{artist_query}' → '{corrected_name}'")
-                    else:
-                        print(f"  ✓ Last.fm confirmed: '{corrected_name}'")
-                    
-                    return corrected_name
-                
-                # STRATEGY 2: If artist search fails, try track search
-                # (sometimes people type artist names that appear in track results)
-                print(f"  🔍 Trying track search for: '{artist_query}'")
-                track_search = self.lastfm.search_for_track('', artist_query)
-                track_matches = track_search.get_next_page() if hasattr(track_search, 'get_next_page') else list(track_search)
-                
-                if track_matches and len(track_matches) > 0:
-                    # Get artist from top track result
-                    top_track = track_matches[0]
-                    if hasattr(top_track, 'artist'):
-                        artist_obj = top_track.artist
-                        artist_name = artist_obj.name if hasattr(artist_obj, 'name') else str(artist_obj)
-                        
-                        # Check if this artist name is similar to query
-                        if self._is_similar(artist_query.lower(), artist_name.lower()):
-                            self._artist_cache[cache_key] = artist_name
-                            print(f"  ✓ Found via track: '{artist_query}' → '{artist_name}'")
-                            return artist_name
-                
-                # STRATEGY 3: Try removing common suffixes/typos
-                cleaned_query = self._clean_artist_query(artist_query)
-                if cleaned_query != artist_query:
-                    print(f"  🔍 Retry with cleaned: '{cleaned_query}'")
-                    return self.fuzzy_match_artist(cleaned_query)  # Recursive call
-                
-            except Exception as e:
-                print(f"  ⚠️  Search error for '{artist_query}': {e}")
-            
-            # FALLBACK: Return original
-            print(f"  ℹ️  No match found, using original: '{artist_query}'")
-            self._artist_cache[cache_key] = artist_query
+        """
+        Fast fuzzy matching with cache check and single-attempt Last.fm search.
+        Never stalls or performs 4 fallback web searches.
+        """
+        if not artist_query or not self.lastfm:
             return artist_query
+        
+        artist_query = artist_query.strip()
+        cache_key = artist_query.lower()
+        
+        # Check cache
+        if cache_key in self._artist_cache:
+            return self._artist_cache[cache_key]
+        
+        try:
+            search_results = self.lastfm.search_for_artist(artist_query)
+            matches = search_results.get_next_page() if hasattr(search_results, 'get_next_page') else list(search_results)
+            
+            if matches and len(matches) > 0:
+                best_match = matches[0]
+                corrected_name = best_match.name if hasattr(best_match, 'name') else str(best_match)
+                self._artist_cache[cache_key] = corrected_name
+                return corrected_name
+        except Exception:
+            pass
+        
+        # Fallback to original query
+        self._artist_cache[cache_key] = artist_query
+        return artist_query
         
     def _is_similar(self, str1: str, str2: str, threshold: float = 0.6) -> bool:
         """Check if two strings are similar using simple ratio"""
@@ -287,13 +249,25 @@ class RecommendationEngine:
         )
     
     def get_top_tracks_by_tag(self, tag: str, limit: int = 20) -> List[Song]:
-        """Get top tracks by tag"""
+        """Get top tracks by tag with 1-hour in-memory TTL caching (0.001s return on hits)"""
+        if not tag:
+            return []
+        
+        tag_key = tag.strip().lower()
+        now = time.time()
+        
+        # Check cache
+        if tag_key in self._tag_cache:
+            ts, cached_songs = self._tag_cache[tag_key]
+            if now - ts < 3600:
+                return cached_songs[:limit]
+        
         songs = []
         if not self.lastfm:
             return songs
         
         try:
-            tag_obj = self.lastfm.get_tag(tag)
+            tag_obj = self.lastfm.get_tag(tag_key)
             top_tracks = tag_obj.get_top_tracks(limit=limit)
             
             for track_info in top_tracks:
@@ -303,24 +277,35 @@ class RecommendationEngine:
                         songs.append(song)
                 except Exception:
                     continue
+            
+            if songs:
+                self._tag_cache[tag_key] = (now, songs)
         except Exception as e:
             print(f"Error for tag '{tag}': {e}")
         
         return songs
     
     def get_artist_top_tracks(self, artist_name: str, limit: int = 10, mood_filter: Optional[str] = None) -> List[Song]:
-        """Get artist's top tracks with fuzzy matching"""
+        """Get artist's top tracks with fuzzy matching & 1-hour in-memory TTL caching"""
+        if not artist_name:
+            return []
+        
+        corrected_artist = self.fuzzy_match_artist(artist_name)
+        artist_key = f"{corrected_artist.strip().lower()}_{mood_filter or ''}"
+        now = time.time()
+        
+        # Check cache
+        if artist_key in self._artist_tracks_cache:
+            ts, cached_songs = self._artist_tracks_cache[artist_key]
+            if now - ts < 3600:
+                return cached_songs[:limit]
+        
         songs = []
         if not self.lastfm:
             return songs
         
-        corrected_artist = self.fuzzy_match_artist(artist_name)
-        
         try:
             print(f"  🎤 Fetching tracks for: {corrected_artist}")
-            if mood_filter:
-                print(f"     🎭 Filtering by mood: {mood_filter}")
-            
             artist = self.lastfm.get_artist(corrected_artist)
             fetch_limit = limit * 2 if mood_filter else limit
             top_tracks = artist.get_top_tracks(limit=fetch_limit)
@@ -333,12 +318,11 @@ class RecommendationEngine:
                     song = self.track_to_song(track_info, skip_youtube=True)
                     if song and song.name:
                         songs.append(song)
-                        print(f"     ✓ Added: {song.name} by {song.artist}")
                 except Exception as e:
-                    print(f"     ✗ Error converting track: {e}")
                     continue
             
-            print(f"  ✓ Got {len(songs)} tracks from {corrected_artist}" + (f" (mood-filtered: {mood_filter})" if mood_filter else ""))
+            if songs:
+                self._artist_tracks_cache[artist_key] = (now, songs)
         except Exception as e:
             print(f"  ✗ Error getting tracks for {corrected_artist}: {e}")
         
@@ -618,112 +602,93 @@ class RecommendationEngine:
         TARGET_CAT3 = 4  # Similar tracks
         
         # -------------------------------------------------------------
-        # CATEGORY 1: Artist + Mood + Language
+        # PARALLEL RETRIEVAL FOR ALL CATEGORIES (MAX 2.5s TIMEOUT)
         # -------------------------------------------------------------
-        if corrected_singers:
-            print(f"📌 CATEGORY 1: Getting up to {TARGET_CAT1} songs (Artist + Mood)")
-            songs_per_artist = max(3, TARGET_CAT1 // len(corrected_singers[:3]))
+        futures_map = {}
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            # 1. Parallel Artist Tracks
+            if corrected_singers:
+                for singer in corrected_singers[:3]:
+                    fut = executor.submit(self.get_artist_top_tracks, singer, 8, mood)
+                    futures_map[fut] = ('artist', singer)
             
-            for singer in corrected_singers[:3]:
-                if len(bucket_artist) >= TARGET_CAT1:
-                    break
-                artist_songs = self.get_artist_top_tracks(singer, limit=songs_per_artist * 2, mood_filter=mood)
-                for song in artist_songs:
-                    if len(bucket_artist) >= TARGET_CAT1:
-                        break
-                    key = f"{song.name}-{song.artist}".lower()
-                    if key not in added:
+            # 2. Parallel Language Tag
+            fut_lang = executor.submit(self.get_top_tracks_by_tag, language_tag, 15)
+            futures_map[fut_lang] = ('lang', language_tag)
+            
+            # 3. Parallel Mood Tags
+            for m_name in valid_mood_dist.keys():
+                for t in MoodDetector.get_mood_tags(m_name)[:2]:
+                    fut_m = executor.submit(self.get_top_tracks_by_tag, t, 15)
+                    futures_map[fut_m] = ('mood', m_name, t)
+            
+            # 4. Parallel Similar Tracks
+            if favorite_songs:
+                for fav_song in favorite_songs[:2]:
+                    parsed = self.parse_song_string(fav_song, corrected_singers)
+                    s_name, s_artist = parsed['name'], parsed['artist']
+                    if s_artist:
+                        fut_sim = executor.submit(self.get_similar_tracks, s_name, s_artist, 6, mood)
+                        futures_map[fut_sim] = ('similar', fav_song)
+
+            # Wait maximum 2.5s for all parallel network calls
+            done, not_done = wait(futures_map.keys(), timeout=2.5)
+            for f in not_done:
+                f.cancel()
+        
+        # Gather results into categorized buckets
+        for fut in done:
+            meta = futures_map[fut]
+            try:
+                songs = fut.result()
+            except Exception:
+                continue
+            
+            cat_type = meta[0]
+            if cat_type == 'artist':
+                singer = meta[1]
+                for s in songs:
+                    key = f"{s.name}-{s.artist}".lower()
+                    if key not in added and len(bucket_artist) < TARGET_CAT1:
                         added.add(key)
-                        song.mood_match = mood
-                        song.ai_explanation = f"Matches your {mood.capitalize()} mood & preference for {song.artist}."
-                        bucket_artist.append(song)
-            print(f"  ✅ Category 1: {len(bucket_artist)} songs\n")
-        else:
-            print(f"⏭️  CATEGORY 1: Skipped (no favorite artists)\n")
-        
-        # -------------------------------------------------------------
-        # CATEGORY 2: Weighted Multi-Class Mood Allocation
-        # -------------------------------------------------------------
-        print(f"📌 CATEGORY 2: Getting {TARGET_CAT2} songs (Weighted Multi-Mood Spectrum)")
-        total_dist_weight = sum(valid_mood_dist.values()) or 1.0
-        
-        for m_name, m_weight in sorted(valid_mood_dist.items(), key=lambda x: x[1], reverse=True):
-            mood_quota = max(1, round(TARGET_CAT2 * (m_weight / total_dist_weight)))
-            m_tags = MoodDetector.get_mood_tags(m_name)
-            
-            mood_pool = []
-            lang_pool = self.get_top_tracks_by_tag(language_tag, limit=15)
-            mood_pool.extend(lang_pool)
-            
-            for t in m_tags[:2]:
-                mood_pool.extend(self.get_top_tracks_by_tag(t, limit=15))
-            
-            collected_for_this_mood = 0
-            for song in mood_pool:
-                if collected_for_this_mood >= mood_quota or len(bucket_mood) >= TARGET_CAT2:
-                    break
-                key = f"{song.name}-{song.artist}".lower()
-                if key not in added:
-                    added.add(key)
-                    conf_pct = int(round(m_weight))
-                    song.mood_match = m_name
-                    song.ai_explanation = f"Curated for your {conf_pct}% {m_name.capitalize()} emotional spectrum."
-                    bucket_mood.append(song)
-                    collected_for_this_mood += 1
-                    
-        print(f"  ✅ Category 2: {len(bucket_mood)} songs across {len(valid_mood_dist)} moods\n")
-        
-        # -------------------------------------------------------------
-        # CATEGORY 3: Similar Tracks + Mood
-        # -------------------------------------------------------------
-        if favorite_songs:
-            print(f"📌 CATEGORY 3: Getting {TARGET_CAT3} songs (Similar Tracks)")
-            songs_per_fav = max(2, TARGET_CAT3 // len(favorite_songs[:3]))
-            
-            for fav_song in favorite_songs[:3]:
-                if len(bucket_similar) >= TARGET_CAT3:
-                    break
-                parsed = self.parse_song_string(fav_song, corrected_singers)
-                s_name, s_artist = parsed['name'], parsed['artist']
-                if not s_artist:
-                    continue
-                similar_songs = self.get_similar_tracks(s_name, s_artist, limit=songs_per_fav * 2, mood_filter=mood)
-                for song in similar_songs:
-                    if len(bucket_similar) >= TARGET_CAT3:
-                        break
-                    key = f"{song.name}-{song.artist}".lower()
-                    if key not in added:
+                        s.mood_match = mood
+                        s.ai_explanation = f"Matches your {mood.capitalize()} mood & preference for {singer}."
+                        bucket_artist.append(s)
+            elif cat_type in ('lang', 'mood'):
+                m_tag = meta[1] if cat_type == 'mood' else mood
+                conf_pct = int(round(valid_mood_dist.get(m_tag, 70.0)))
+                for s in songs:
+                    key = f"{s.name}-{s.artist}".lower()
+                    if key not in added and len(bucket_mood) < (TARGET_CAT2 + TARGET_CAT1):
                         added.add(key)
-                        song.mood_match = mood
-                        song.ai_explanation = f"Curated because it shares emotional resonance with '{fav_song}'."
-                        bucket_similar.append(song)
-            print(f"  ✅ Category 3: {len(bucket_similar)} songs\n")
-        else:
-            print(f"⏭️  CATEGORY 3: Skipped (no favorite songs)\n")
+                        s.mood_match = m_tag
+                        s.ai_explanation = f"Curated for your {conf_pct}% {m_tag.capitalize()} emotional spectrum."
+                        bucket_mood.append(s)
+            elif cat_type == 'similar':
+                fav_name = meta[1]
+                for s in songs:
+                    key = f"{s.name}-{s.artist}".lower()
+                    if key not in added and len(bucket_similar) < TARGET_CAT3:
+                        added.add(key)
+                        s.mood_match = mood
+                        s.ai_explanation = f"Curated because it shares emotional resonance with '{fav_name}'."
+                        bucket_similar.append(s)
             
         # -------------------------------------------------------------
-        # CATEGORY 4: Fallback Pool
+        # CATEGORY 4: Fast Fallback Pool (Pre-cached Seeds)
         # -------------------------------------------------------------
         total_collected = len(bucket_artist) + len(bucket_mood) + len(bucket_similar)
         needed = request.limit - total_collected
         
         if needed > 0:
-            print(f"📌 CATEGORY 4: Fallback Pool (Need {needed} more)")
-            fallback_tags = MoodDetector.get_mood_tags(mood)
-            fb_pool = self.get_top_tracks_by_tag(language_tag, limit=needed * 2)
-            for t in fallback_tags:
-                fb_pool.extend(self.get_top_tracks_by_tag(t, limit=needed))
-                
+            fb_pool = self.get_seed_recommendations(mood, language, needed * 2)
             for song in fb_pool:
                 if len(bucket_fallback) >= needed:
                     break
                 key = f"{song.name}-{song.artist}".lower()
                 if key not in added:
                     added.add(key)
-                    song.mood_match = mood
-                    song.ai_explanation = f"Selected for smooth musical transition in your {mood.capitalize()} mix."
                     bucket_fallback.append(song)
-            print(f"  ✅ Category 4: {len(bucket_fallback)} songs\n")
             
         # -------------------------------------------------------------
         # ROUND-ROBIN INTERLEAVING & ANTI-REPETITION BALANCING
@@ -759,17 +724,23 @@ class RecommendationEngine:
                 final.append(candidate)
                 
         # -------------------------------------------------------------
-        # RESILIENT SEED FALLBACK (IF LAST.FM RETURNED ZERO TRACKS)
+        # RESILIENT SEED BACKFILL (GUARANTEE FULL LIMIT)
         # -------------------------------------------------------------
-        if len(final) == 0:
-            print("⚠️ Zero tracks found from Last.fm. Falling back to curated seed bank.")
-            final = self.get_seed_recommendations(mood, language, request.limit)
+        if len(final) < request.limit:
+            needed = request.limit - len(final)
+            seeds = self.get_seed_recommendations(mood, language, needed * 2)
+            for s in seeds:
+                if len(final) >= request.limit:
+                    break
+                ckey = f"{s.name}-{s.artist}".lower()
+                if ckey not in final_keys:
+                    final_keys.add(ckey)
+                    final.append(s)
             
         # -------------------------------------------------------------
-        # PARALLEL YOUTUBE RESOLUTION (⚡ 10X SPEEDUP)
+        # FAST PARALLEL YOUTUBE RESOLUTION (⚡ 2.0s TIMEOUT)
         # -------------------------------------------------------------
-        print("🎬 Fetching YouTube IDs in parallel...")
-        final = music_player.resolve_youtube_ids_parallel(final, max_workers=10)
+        final = music_player.resolve_youtube_ids_parallel(final, max_workers=10, timeout=2.0)
         youtube_success = sum(1 for s in final if getattr(s, 'youtube_id', None))
         print(f"✅ YouTube IDs resolved in parallel: {youtube_success}/{len(final)}\n")
         
@@ -836,29 +807,39 @@ class RecommendationEngine:
         recommendations = []
         added = set()
         
-        print(f"\n🎵 Basic Recommendations for mood: {mood}")
-        print(f"Tags: {mood_tags}\n")
-        
-        for tag in mood_tags:
-            if len(recommendations) >= request.limit:
-                break
+        # Parallel tag fetching with 2.0s timeout
+        with ThreadPoolExecutor(max_workers=len(mood_tags) or 1) as executor:
+            fut_map = {executor.submit(self.get_top_tracks_by_tag, tag, 15): tag for tag in mood_tags}
+            done, not_done = wait(fut_map.keys(), timeout=2.0)
+            for f in not_done:
+                f.cancel()
             
-            songs = self.get_top_tracks_by_tag(tag, limit=15)
-            for s in songs:
+            for f in done:
+                try:
+                    songs = f.result()
+                    for s in songs:
+                        key = f"{s.name}-{s.artist}".lower()
+                        if key not in added and len(recommendations) < request.limit:
+                            added.add(key)
+                            s.mood_match = mood
+                            s.ai_explanation = f"Matches your {mood.capitalize()} vibe."
+                            recommendations.append(s)
+                except Exception:
+                    pass
+        
+        # Backfill from seeds if under limit
+        if len(recommendations) < request.limit:
+            needed = request.limit - len(recommendations)
+            seeds = self.get_seed_recommendations(mood, "english", needed * 2)
+            for s in seeds:
+                if len(recommendations) >= request.limit:
+                    break
                 key = f"{s.name}-{s.artist}".lower()
-                if key not in added and len(recommendations) < request.limit:
+                if key not in added:
                     added.add(key)
-                    s.mood_match = mood
-                    s.ai_explanation = f"Matches your {mood.capitalize()} vibe."
                     recommendations.append(s)
         
-        print("🎬 Fetching YouTube IDs in parallel for basic recommendations...")
-        recommendations = music_player.resolve_youtube_ids_parallel(recommendations, max_workers=10)
-
-        # Fallback to seeds if empty
-        if len(recommendations) == 0:
-            print("⚠️ Zero tracks found from Last.fm. Falling back to curated seed bank.")
-            recommendations = self.get_seed_recommendations(mood, "english", request.limit)
+        recommendations = music_player.resolve_youtube_ids_parallel(recommendations, max_workers=10, timeout=2.0)
         
         print(f"✅ Retrieved {len(recommendations)} songs\n")
         

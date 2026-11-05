@@ -5,6 +5,7 @@ import AppShell from './components/AppShell';
 
 // Pages
 import HomePage from './pages/HomePage';
+import DiscoverPage from './pages/DiscoverPage';
 import LoginPage from './pages/LoginPage';
 import PlaylistsPage from './pages/PlaylistsPage';
 import MoodDetectionPage from './pages/MoodDetectionPage';
@@ -20,6 +21,7 @@ function App() {
           <Routes>
             {/* Main Flow */}
             <Route path="/" element={<HomePage />} />
+            <Route path="/discover" element={<DiscoverPage />} />
             <Route path="/mood-detection" element={<MoodDetectionPage />} />
             <Route path="/preferences" element={<PreferencesPage />} />
             <Route path="/recommendations" element={<RecommendationsPage />} />

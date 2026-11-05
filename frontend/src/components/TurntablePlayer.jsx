@@ -1,0 +1,387 @@
+import { useState, useRef, useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
+import {
+  togglePlayPause,
+  playNext,
+  playPrevious,
+  seekTo,
+  setVolume,
+  toggleMute,
+  toggleShuffle,
+  cycleRepeatMode,
+  toggleTurntable,
+  toggleQueue,
+} from '../store/audioSlice';
+import AddToPlaylistButton from './AddToPlaylistButton';
+
+const formatTime = (seconds) => {
+  if (isNaN(seconds) || seconds === null) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+};
+
+const MOOD_GLOW_COLORS = {
+  happy: '#F59E0B',
+  calm: '#00F2FE',
+  focus: '#10B981',
+  energetic: '#F97316',
+  romantic: '#EC4899',
+  sad: '#3B82F6',
+  intense: '#EF4444',
+};
+
+const TurntablePlayer = ({ isModal = false, onClose }) => {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const progressBarRef = useRef(null);
+
+  const {
+    currentSong,
+    isPlaying,
+    currentTime,
+    duration,
+    volume,
+    isMuted,
+    isShuffle,
+    repeatMode,
+    activeMood,
+  } = useSelector((state) => state.audio);
+
+  const [isLiked, setIsLiked] = useState(false);
+  const moodColor = MOOD_GLOW_COLORS[activeMood?.toLowerCase()] || '#00F2FE';
+
+  useEffect(() => {
+    if (!currentSong) return;
+    try {
+      const stored = localStorage.getItem('liked_songs');
+      if (stored) {
+        const map = JSON.parse(stored);
+        setIsLiked(!!map[currentSong.id || `${currentSong.name}-${currentSong.artist}`]);
+      }
+    } catch (e) {}
+  }, [currentSong]);
+
+  const toggleLike = () => {
+    if (!currentSong) return;
+    const id = currentSong.id || `${currentSong.name}-${currentSong.artist}`;
+    const nextState = !isLiked;
+    setIsLiked(nextState);
+    try {
+      const stored = localStorage.getItem('liked_songs');
+      const map = stored ? JSON.parse(stored) : {};
+      map[id] = nextState;
+      localStorage.setItem('liked_songs', JSON.stringify(map));
+    } catch (e) {}
+  };
+
+  const handleSeekClick = (e) => {
+    if (!progressBarRef.current || !duration) return;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, clickX / rect.width));
+    dispatch(seekTo(pct * duration));
+  };
+
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  const handleClose = () => {
+    if (onClose) {
+      onClose();
+    } else {
+      dispatch(toggleTurntable());
+      if (!isModal) {
+        navigate(-1);
+      }
+    }
+  };
+
+  if (!currentSong) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] p-6 text-center">
+        <div className="w-24 h-24 rounded-full bg-obsidian-900 border border-obsidian-800 flex items-center justify-center text-slate-500 mb-4 shadow-inner">
+          <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-bold text-white mb-1">Turntable Standing By</h3>
+        <p className="text-xs text-slate-400 max-w-sm mb-6">
+          No song is currently active. Select a track or dial in a mood to spin up the analog vinyl engine.
+        </p>
+        <button
+          onClick={() => navigate('/mood-detection')}
+          className="px-5 py-2.5 rounded-xl bg-cyan/15 hover:bg-cyan/25 text-cyan border border-cyan/30 text-xs font-bold transition-all"
+        >
+          Dial In a Mood
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`relative w-full max-w-5xl mx-auto flex flex-col justify-between select-none ${isModal ? 'p-4 sm:p-8' : 'p-4 sm:p-6 my-4'}`}>
+      {/* Top Bar / Header */}
+      <div className="flex items-center justify-between pb-4 border-b border-obsidian-800/60 mb-6">
+        <div className="flex items-center gap-2.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-cyan animate-pulse" />
+          <h2 className="text-xs sm:text-sm font-bold text-white uppercase tracking-widest font-mono">
+            Analog Vinyl Turntable
+          </h2>
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-obsidian-800 text-slate-300 border border-obsidian-750">
+            33 ⅓ RPM
+          </span>
+        </div>
+
+        <button
+          onClick={handleClose}
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-white bg-obsidian-900/80 hover:bg-obsidian-800 border border-obsidian-750 transition-colors"
+          title="Minimize Turntable"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Main Showcase Stage: Vinyl Disc + Tonearm */}
+      <div className="relative flex flex-col lg:flex-row items-center justify-around gap-8 sm:gap-12 my-6">
+        {/* Dynamic Color Bleed Halo behind Turntable */}
+        <div
+          className="absolute w-80 h-80 sm:w-96 sm:h-96 rounded-full blur-3xl opacity-30 transition-all duration-1000 pointer-events-none"
+          style={{ backgroundColor: moodColor }}
+        />
+
+        {/* 12" Vinyl Disc Enclosure */}
+        <div className="relative w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96 flex items-center justify-center">
+          {/* Turntable Platter Base */}
+          <div
+            className="absolute inset-0 rounded-full bg-obsidian-950 border border-obsidian-800 shadow-2xl"
+            style={{
+              boxShadow: `0 25px 60px -15px rgba(0,0,0,0.9), 0 0 30px ${moodColor}33`,
+            }}
+          />
+
+          {/* Rotating Vinyl Record */}
+          <div
+            className={`relative w-[92%] h-[92%] rounded-full bg-[#0a0a0a] flex items-center justify-center shadow-2xl transition-transform ${
+              isPlaying ? 'animate-spin [animation-duration:6s]' : ''
+            }`}
+            style={{
+              boxShadow: 'inset 0 0 30px rgba(0,0,0,0.9), 0 4px 15px rgba(0,0,0,0.6)',
+            }}
+          >
+            {/* Concentric Vinyl Grooves */}
+            <div className="absolute inset-4 rounded-full border border-white/5 opacity-50" />
+            <div className="absolute inset-8 rounded-full border border-white/5 opacity-60" />
+            <div className="absolute inset-12 rounded-full border border-white/5 opacity-70" />
+            <div className="absolute inset-16 rounded-full border border-white/5 opacity-50" />
+            <div className="absolute inset-20 rounded-full border border-white/5 opacity-60" />
+            <div className="absolute inset-24 rounded-full border border-white/5 opacity-40" />
+
+            {/* High-Gloss Vinyl Sheen Overlay */}
+            <div
+              className="absolute inset-0 rounded-full pointer-events-none opacity-25"
+              style={{
+                background:
+                  'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, transparent 40%, rgba(255,255,255,0.2) 60%, transparent 100%)',
+              }}
+            />
+
+            {/* Center Album Art Label */}
+            <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden border-4 border-obsidian-950 shadow-inner flex items-center justify-center bg-obsidian-900">
+              <img
+                src={
+                  currentSong.image ||
+                  'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80'
+                }
+                alt={currentSong.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.target.src =
+                    'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80';
+                }}
+              />
+              {/* Center Spindle Hole */}
+              <div className="absolute w-4 h-4 rounded-full bg-obsidian-950 border-2 border-white/40 shadow-inner" />
+            </div>
+          </div>
+
+          {/* Mechanical Tonearm Assembly */}
+          <div
+            className={`absolute -top-4 -right-4 w-28 h-48 sm:w-36 sm:h-56 pointer-events-none origin-top-right transition-transform duration-700 ease-out z-20 ${
+              isPlaying ? 'rotate-12 translate-x-1' : '-rotate-6'
+            }`}
+          >
+            {/* Pivot Base */}
+            <div className="absolute top-2 right-2 w-8 h-8 rounded-full bg-gradient-to-br from-slate-400 to-slate-700 border border-slate-400 shadow-md flex items-center justify-center">
+              <div className="w-3 h-3 rounded-full bg-slate-900" />
+            </div>
+            {/* Curved Metallic Arm */}
+            <div className="absolute top-6 right-5 w-1.5 h-36 bg-gradient-to-b from-slate-300 via-slate-400 to-slate-600 rounded-full shadow-lg transform -rotate-12 origin-top" />
+            {/* Cartridge & Stylus Needle */}
+            <div className="absolute bottom-6 left-6 w-4 h-7 bg-slate-900 border border-slate-600 rounded-sm shadow-md flex flex-col items-center justify-end">
+              <div className="w-1 h-1.5 bg-amber-400 rounded-full" />
+            </div>
+          </div>
+        </div>
+
+        {/* Right Stage: Now Playing Info & Explainable AI */}
+        <div className="flex-1 max-w-md w-full space-y-4 text-center lg:text-left">
+          {/* Mood Badge */}
+          <div className="flex items-center justify-center lg:justify-start gap-2">
+            <span
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold capitalize border"
+              style={{
+                backgroundColor: `${moodColor}18`,
+                borderColor: `${moodColor}40`,
+                color: moodColor,
+              }}
+            >
+              <span>●</span>
+              <span>{currentSong.mood_match || activeMood || 'Dynamic Match'}</span>
+            </span>
+
+            <span className="text-xs font-mono text-slate-500">• 320kbps Stream</span>
+          </div>
+
+          {/* Track Title & Artist */}
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-snug">
+              {currentSong.name}
+            </h1>
+            <p className="text-base sm:text-lg font-medium text-slate-300 mt-1">
+              {currentSong.artist}
+            </p>
+          </div>
+
+          {/* Explainable AI Badge */}
+          <div className="p-3.5 rounded-2xl bg-emerald/10 border border-emerald/25 text-emerald text-xs leading-relaxed flex items-start gap-2.5">
+            <span className="text-sm mt-0.5 flex-shrink-0">💡</span>
+            <div>
+              <span className="font-semibold block mb-0.5">Why AI Recommended This:</span>
+              <p className="text-emerald-200/90 text-[11px]">
+                {currentSong.ai_explanation ||
+                  `Matches your ${activeMood} emotional state and session preferences with harmonic continuity.`}
+              </p>
+            </div>
+          </div>
+
+          {/* Scrubber Progress Bar */}
+          <div className="space-y-1.5 pt-2">
+            <div
+              ref={progressBarRef}
+              onClick={handleSeekClick}
+              className="group relative w-full h-2.5 bg-obsidian-950/80 rounded-full cursor-pointer overflow-hidden border border-obsidian-800"
+            >
+              <div
+                className="h-full rounded-full transition-all duration-150"
+                style={{
+                  width: `${progressPercent}%`,
+                  background: `linear-gradient(90deg, ${moodColor} 0%, #ffffff 100%)`,
+                }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(duration)}</span>
+            </div>
+          </div>
+
+          {/* Transport Controls */}
+          <div className="flex items-center justify-center lg:justify-start gap-4 pt-2">
+            {/* Shuffle */}
+            <button
+              onClick={() => dispatch(toggleShuffle())}
+              className={`p-2 rounded-xl transition-colors ${
+                isShuffle ? 'text-cyan bg-cyan/10' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Shuffle"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H4v-4m16 4h-4v-4m0-4h4V4M4 8h4V4m4 12l8 4M4 20l16-16" />
+              </svg>
+            </button>
+
+            {/* Previous */}
+            <button
+              onClick={() => dispatch(playPrevious())}
+              className="p-2 text-slate-300 hover:text-white hover:scale-110 transition-transform"
+              title="Previous"
+            >
+              <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
+                <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+              </svg>
+            </button>
+
+            {/* Play / Pause Giant Button */}
+            <button
+              onClick={() => dispatch(togglePlayPause())}
+              className="w-14 h-14 rounded-full flex items-center justify-center text-obsidian-950 shadow-xl transition-all hover:scale-105 active:scale-95"
+              style={{
+                background: `linear-gradient(135deg, ${moodColor} 0%, #ffffff 100%)`,
+                boxShadow: `0 8px 25px -4px ${moodColor}77`,
+              }}
+              title={isPlaying ? 'Pause' : 'Play'}
+            >
+              {isPlaying ? (
+                <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6 fill-current ml-0.5" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </button>
+
+            {/* Next */}
+            <button
+              onClick={() => dispatch(playNext())}
+              className="p-2 text-slate-300 hover:text-white hover:scale-110 transition-transform"
+              title="Next"
+            >
+              <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
+                <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+              </svg>
+            </button>
+
+            {/* Repeat */}
+            <button
+              onClick={() => dispatch(cycleRepeatMode())}
+              className={`p-2 rounded-xl transition-colors relative ${
+                repeatMode !== 'off' ? 'text-cyan bg-cyan/10' : 'text-slate-400 hover:text-white'
+              }`}
+              title={`Repeat: ${repeatMode}`}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {repeatMode === 'one' && (
+                <span className="absolute top-1 right-1 text-[8px] font-bold text-cyan">1</span>
+              )}
+            </button>
+
+            {/* Like */}
+            <button
+              onClick={toggleLike}
+              className={`p-2 rounded-xl transition-colors ${
+                isLiked ? 'text-rose-500' : 'text-slate-400 hover:text-white'
+              }`}
+              title={isLiked ? 'Unlike' : 'Like'}
+            >
+              <svg className="w-5 h-5" fill={isLiked ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+            </button>
+
+            {/* Add to Playlist */}
+            <AddToPlaylistButton song={currentSong} compact={true} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default TurntablePlayer;

@@ -32,7 +32,7 @@ const Recommendations = ({ mood, preferences, onRecommendations, onError }) => {
         setStage(stages[currentStage].text);
         currentStage++;
       }
-    }, 900);
+    }, 200);
 
     try {
       const response = await axios.post(
