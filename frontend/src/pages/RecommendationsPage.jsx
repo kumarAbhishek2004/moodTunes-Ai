@@ -1,266 +1,206 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Header from '../components/Header';
-import Particles from '../components/Particles';
-import Recommendations from '../components/Recommendations';
+import { useSelector, useDispatch } from 'react-redux';
+import axios from 'axios';
+import { API_BASE_URL } from '../config/api';
+import { playSong, setQueue, setActiveMood } from '../store/audioSlice';
+import DenseTracklist from '../components/DenseTracklist';
 import Chatbot from '../components/Chatbot';
 
 const RecommendationsPage = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+
+  const activeReduxMood = useSelector((state) => state.audio.activeMood);
   const [mood, setMood] = useState(null);
   const [preferences, setPreferences] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
-  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [retryCount, setRetryCount] = useState(0);
-
-  const handlePlaySong = (song) => {
-    localStorage.setItem('recommendations', JSON.stringify([song]));
-    navigate('/player');
-  };
-
-  const handlePlayPlaylist = (playlist) => {
-    if (playlist?.songs?.length > 0) {
-      localStorage.setItem('recommendations', JSON.stringify(playlist.songs));
-      navigate('/player');
-    }
-  };
+  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
 
   useEffect(() => {
+    try {
+      const storedMood = localStorage.getItem('selectedMood');
+      const storedPreferences = localStorage.getItem('userPreferences');
+      const cachedRecs = localStorage.getItem('recommendations');
+
+      if (storedMood) {
+        setMood(JSON.parse(storedMood));
+      } else {
+        setMood({ mood: activeReduxMood || 'calm', confidence: 100 });
+      }
+
+      if (storedPreferences) {
+        setPreferences(JSON.parse(storedPreferences));
+      }
+
+      if (cachedRecs) {
+        const parsedRecs = JSON.parse(cachedRecs);
+        if (Array.isArray(parsedRecs) && parsedRecs.length > 0) {
+          setRecommendations(parsedRecs);
+          return;
+        }
+      }
+    } catch (e) {}
+
+    // If no cached recs, fetch freshly
+    fetchFreshRecommendations();
+  }, [activeReduxMood]);
+
+  const fetchFreshRecommendations = async () => {
+    setLoading(true);
+    setError(null);
+
     const storedMood = localStorage.getItem('selectedMood');
-    const storedPreferences = localStorage.getItem('userPreferences');
+    const moodObj = storedMood ? JSON.parse(storedMood) : { mood: activeReduxMood || 'calm' };
+    const moodKey = (typeof moodObj === 'string' ? moodObj : moodObj.mood) || 'calm';
 
-    if (storedMood && storedPreferences) {
-      setMood(JSON.parse(storedMood));
-      setPreferences(JSON.parse(storedPreferences));
-    } else {
-      navigate('/mood-detection');
+    const storedPrefs = localStorage.getItem('userPreferences');
+    const prefsObj = storedPrefs ? JSON.parse(storedPrefs) : {};
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/personalized-recommendations`, {
+        mood: moodKey,
+        mood_distribution: moodObj.mood_distribution || { [moodKey]: 100 },
+        user_id: 'default',
+        limit: 20,
+        preferences: {
+          language: prefsObj.language || 'hindi',
+          favorite_songs: prefsObj.favoriteSongs || [],
+          favorite_singers: prefsObj.favoriteSingers || [],
+          search_query: prefsObj.searchQuery || '',
+        },
+      });
+
+      const songs = response.data.songs || response.data.recommendations || [];
+      if (songs.length > 0) {
+        setRecommendations(songs);
+        dispatch(setQueue(songs));
+        try {
+          localStorage.setItem('recommendations', JSON.stringify(songs));
+        } catch (e) {}
+      } else {
+        throw new Error('No songs returned from recommendation engine');
+      }
+    } catch (err) {
+      console.error('Error fetching recommendations:', err);
+      setError(err.response?.data?.detail || 'Failed to curate stream. Please verify backend connection.');
+    } finally {
+      setLoading(false);
     }
-  }, [navigate]);
-
-  const handleRecommendations = (songs) => {
-    setError(null);
-    setRecommendations(songs);
-    localStorage.setItem('recommendations', JSON.stringify(songs));
-
-    setTimeout(() => {
-      if (songs?.length > 0) navigate('/player');
-    }, 1500);
   };
-
-  const handleRecommendationsError = (errMsg) => {
-    setError(errMsg || 'Failed to load recommendations. Please try again.');
-  };
-
-  const handleRetry = () => {
-    setError(null);
-    setRetryCount(prev => prev + 1);
-  };
-
-  if (!mood || !preferences) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900 flex items-center justify-center">
-        <div className="animate-spin h-12 w-12 rounded-full border-t-2 border-b-2 border-purple-500"></div>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900">
-      <Particles />
+    <div className="container mx-auto px-4 sm:px-6 py-6 md:py-8 max-w-7xl animate-fadeIn">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <button
+          onClick={() => navigate('/')}
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white px-3.5 py-2 rounded-xl bg-obsidian-900/80 border border-obsidian-800 hover:border-obsidian-750 transition-colors w-fit"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          <span>Back to Home</span>
+        </button>
 
-      <div className="relative z-10">
-        <Header />
-
-        <div className="container mx-auto px-6 py-12">
-
-          {/* Back Button */}
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/preferences')}
-            className="mb-6 flex items-center gap-2 text-gray-400 hover:text-white transition"
+            onClick={fetchFreshRecommendations}
+            disabled={loading}
+            className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-xl bg-obsidian-800 hover:bg-obsidian-750 text-slate-200 border border-obsidian-700 transition-colors disabled:opacity-50"
           >
-            <svg className="w-5 h-5" stroke="currentColor" fill="none" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            <svg className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            Back to Preferences
+            <span>Regenerate Stream</span>
           </button>
 
-          {/* Header */}
-          <div className="text-center mb-12 animate-fadeIn">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-pink-500 to-pink-600 rounded-2xl mb-6 shadow-2xl">
-              <span className="text-4xl">🎵</span>
-            </div>
-
-            <h1 className="text-5xl font-black text-white mb-4">Get Recommendations</h1>
-
-            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              AI is curating the perfect playlist based on your mood and preferences
-            </p>
-
-            {/* Info Badges */}
-            <div className="mt-6 flex items-center justify-center gap-4 flex-wrap">
-              <div className="px-4 py-2 rounded-xl bg-slate-800/50 border border-slate-700">
-                <span className="text-gray-400 text-sm">Mood:</span>
-                <span className="text-white font-semibold ml-1 capitalize">{mood.mood || mood}</span>
-              </div>
-
-              <div className="px-4 py-2 rounded-xl bg-slate-800/50 border border-slate-700">
-                <span className="text-gray-400 text-sm">Language:</span>
-                <span className="text-white font-semibold ml-1 capitalize">{preferences.language}</span>
-              </div>
-
-              {preferences.favoriteSingers?.length > 0 && (
-                <div className="px-4 py-2 rounded-xl bg-slate-800/50 border border-slate-700">
-                  <span className="text-gray-400 text-sm">Artists:</span>
-                  <span className="text-white font-semibold ml-1">{preferences.favoriteSingers.length}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ⭐ Premium Loading or Error Card */}
-          <div className="mt-10 flex justify-center">
-            <div className="w-full max-w-4xl p-12 rounded-3xl bg-gradient-to-br 
-              from-slate-800/40 via-purple-900/20 to-slate-800/40 
-              shadow-2xl border border-slate-700/40 backdrop-blur-2xl">
-
-              {error ? (
-                <div className="flex flex-col items-center text-center animate-fadeIn py-6">
-                  <div className="w-20 h-20 bg-red-500/20 border border-red-500/30 rounded-full flex items-center justify-center mb-6">
-                    <span className="text-4xl">⚠️</span>
-                  </div>
-                  <h3 className="text-2xl font-bold text-white mb-2">Unable to Load Recommendations</h3>
-                  <p className="text-gray-400 text-sm max-w-md mb-6">{error}</p>
-                  <div className="flex gap-4">
-                    <button
-                      onClick={handleRetry}
-                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold px-6 py-3 rounded-xl transition-all shadow-lg"
-                    >
-                      Try Again
-                    </button>
-                    <button
-                      onClick={() => navigate('/preferences')}
-                      className="bg-slate-700/60 hover:bg-slate-700 text-gray-300 font-semibold px-6 py-3 rounded-xl transition-all"
-                    >
-                      Back to Preferences
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center animate-fadeIn">
-                  {/* 🔥 Rotating Neon Loader */}
-                  <div className="relative mb-8">
-                    <div className="w-28 h-28 rounded-full border-4 border-transparent 
-                      border-t-purple-500 border-l-pink-500 animate-spin-slow shadow-lg"></div>
-
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-4 h-4 rounded-full bg-pink-500 shadow-lg shadow-pink-500/50"></div>
-                    </div>
-                  </div>
-
-                  {/* Typing Line */}
-                  <p className="text-xl text-white font-semibold typing-animation mb-2">
-                    Please wait…
-                  </p>
-
-                  {/* Fade-in Line */}
-                  <p className="text-gray-300 text-sm animate-fadeTextSlow">
-                    We’re crafting a playlist that matches your vibe 🎶
-                  </p>
-
-                  {/* Delayed Subtle Line */}
-                  <p className="text-gray-400 text-xs mt-1 italic animate-fadeTextDelay">
-                    This may take a little time…
-                  </p>
-
-                  {/* Shimmer Progress Bar */}
-                  <div className="mt-6 w-64 h-3 bg-slate-700/40 overflow-hidden rounded-full">
-                    <div className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 animate-shimmer"></div>
-                  </div>
-                </div>
-              )}
-
-              {/* Underlying recommendation fetcher */}
-              <div className="hidden">
-                <Recommendations
-                  key={retryCount}
-                  mood={mood}
-                  preferences={preferences}
-                  onRecommendations={handleRecommendations}
-                  onError={handleRecommendationsError}
-                />
-              </div>
-            </div>
-          </div>
-
+          <button
+            onClick={() => navigate('/mood-detection')}
+            className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-xl bg-cyan/15 hover:bg-cyan/25 text-cyan border border-cyan/30 transition-colors"
+          >
+            <span>🎛️</span>
+            <span>Change Mood</span>
+          </button>
         </div>
       </div>
 
-      {/* Chatbot */}
+      {/* Stream Overview Banner */}
+      <div className="relative rounded-3xl bg-obsidian-900/80 backdrop-blur-2xl border border-obsidian-800/90 p-6 sm:p-8 shadow-2xl mb-8 overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-32 bg-cyan/10 blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan/10 border border-cyan/30 text-cyan text-xs font-mono font-bold mb-3">
+              <span>● LIVE AI STREAM</span>
+            </div>
+            <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+              Tuned for Your <span className="text-cyan capitalize">{mood?.mood || activeReduxMood || 'Current'}</span> Vibe
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-2xl leading-relaxed">
+              Curated using multi-class emotional quota balancing, artist similarity matching, and transparent Explainable AI badges.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="p-3 px-4 rounded-2xl bg-obsidian-950/80 border border-obsidian-800 text-center">
+              <span className="block text-[10px] uppercase font-mono text-slate-500">Total Tracks</span>
+              <span className="text-xl font-bold text-white font-mono">{recommendations.length}</span>
+            </div>
+            <div className="p-3 px-4 rounded-2xl bg-obsidian-950/80 border border-obsidian-800 text-center">
+              <span className="block text-[10px] uppercase font-mono text-slate-500">Audio Fidelity</span>
+              <span className="text-sm font-bold text-emerald font-mono">Parallel HD</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Loading State */}
+      {loading && (
+        <div className="bg-obsidian-900/70 border border-obsidian-800 rounded-3xl p-12 text-center my-6">
+          <div className="w-12 h-12 mx-auto mb-4 border-2 border-cyan border-t-transparent rounded-full animate-spin" />
+          <h3 className="text-base font-bold text-white mb-1">Synthesizing Your Stream</h3>
+          <p className="text-xs text-slate-400">Querying Last.fm, resolving YouTube audio IDs, and computing explanations...</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && !loading && (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-3xl p-8 text-center my-6">
+          <p className="text-sm text-rose-300 mb-4">{error}</p>
+          <button
+            onClick={fetchFreshRecommendations}
+            className="px-5 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs transition-colors"
+          >
+            Retry Generation
+          </button>
+        </div>
+      )}
+
+      {/* Dense Tracklist Table */}
+      {!loading && !error && (
+        <DenseTracklist
+          songs={recommendations}
+          title="Personalized Emotion Stream"
+          subtitle={`Balanced across multi-class weights & session history`}
+        />
+      )}
+
+      {/* AI Chatbot Assistant */}
       <Chatbot
         isOpen={isChatbotOpen}
         onToggle={() => setIsChatbotOpen(!isChatbotOpen)}
-        currentMood={mood}
-        onPlaySong={handlePlaySong}
-        onPlayPlaylist={handlePlayPlaylist}
+        currentMood={mood?.mood || activeReduxMood}
+        onPlaySong={(song) => dispatch(playSong(song))}
+        onPlayPlaylist={(pl) => {
+          if (pl?.songs?.length > 0) {
+            dispatch(setQueue(pl.songs));
+            dispatch(playSong(pl.songs[0]));
+          }
+        }}
       />
-
-      {/* Animations */}
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fadeIn { animation: fadeIn 0.8s ease-out; }
-
-        /* Neon Spin */
-        @keyframes spinSlow {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        .animate-spin-slow {
-          animation: spinSlow 2s linear infinite;
-        }
-
-        /* Typing Effect */
-        .typing-animation {
-          width: 17ch;
-          overflow: hidden;
-          white-space: nowrap;
-          border-right: 3px solid white;
-          animation: typing 1.6s steps(17), blink .6s infinite step-end alternate;
-        }
-        @keyframes typing { from { width: 0 } }
-        @keyframes blink { 50% { border-color: transparent } }
-
-        /* Fade text animations */
-        @keyframes fadeTextSlow {
-          0% { opacity: 0; transform: translateY(5px); }
-          100% { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fadeTextDelay {
-          0% { opacity: 0; transform: translateY(5px); }
-          40% { opacity: 0; }
-          100% { opacity: 1; transform: translateY(0); }
-        }
-
-        .animate-fadeTextSlow {
-          animation: fadeTextSlow 1.2s ease-out forwards;
-        }
-
-        .animate-fadeTextDelay {
-          animation: fadeTextDelay 2s ease-out forwards;
-        }
-
-        /* Shimmer */
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        .animate-shimmer {
-          animation: shimmer 1.5s infinite linear;
-        }
-      `}</style>
     </div>
   );
 };
