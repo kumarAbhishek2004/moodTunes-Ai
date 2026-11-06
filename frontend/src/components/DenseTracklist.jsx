@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { playSong } from '../store/audioSlice';
 import AddToPlaylistButton from './AddToPlaylistButton';
+import { resolveMusicTheme } from '../utils/themeMap';
 
 const formatDuration = (seconds) => {
   if (!seconds || isNaN(seconds)) return '3:45';
@@ -19,6 +20,9 @@ const DenseTracklist = ({
 }) => {
   const dispatch = useDispatch();
   const { currentSong, isPlaying, activeMood } = useSelector((state) => state.audio);
+
+  // Strict guideline: adapt tracklist colors to the playing track's genre & mood
+  const theme = resolveMusicTheme(currentSong, activeMood);
 
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [likedMap, setLikedMap] = useState({});
@@ -70,7 +74,10 @@ const DenseTracklist = ({
       {/* Table Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-white/10 mb-3 px-2 gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-2.5 h-2.5 rounded-full bg-cyan shadow-[0_0_8px_#00F2FE]" />
+          <div
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: theme.accent, boxShadow: `0 0 10px ${theme.glow}` }}
+          />
           <div>
             <h3 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
               <span>{title}</span>
@@ -79,7 +86,7 @@ const DenseTracklist = ({
               </span>
             </h3>
             <p className="text-[11px] text-slate-400">
-              {subtitle} • {isExpanded ? 'Showing full curated queue' : 'Compact view active'}
+              {subtitle} • {isExpanded ? 'Showing full curated queue' : 'Compact view active'} • Genre: <span style={{ color: theme.accent }}>{theme.name}</span>
             </p>
           </div>
         </div>
@@ -94,14 +101,14 @@ const DenseTracklist = ({
             >
               {isExpanded ? (
                 <>
-                  <svg className="w-3.5 h-3.5 text-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-3.5 h-3.5" style={{ color: theme.accent }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                   <span>⤡ Minimise ({songs.length})</span>
                 </>
               ) : (
                 <>
-                  <svg className="w-3.5 h-3.5 text-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-3.5 h-3.5" style={{ color: theme.accent }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                   </svg>
                   <span>⤢ Maximise All ({songs.length})</span>
@@ -113,7 +120,12 @@ const DenseTracklist = ({
           {/* Play All Button */}
           <button
             onClick={() => handleRowClick(songs[0])}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan/15 hover:bg-cyan/25 text-cyan border border-cyan/30 text-xs font-bold transition-all shadow-sm hover:scale-102"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm hover:scale-102 border"
+            style={{
+              backgroundColor: `${theme.accent}18`,
+              borderColor: `${theme.accent}45`,
+              color: theme.accent,
+            }}
           >
             <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
               <path d="M8 5v14l11-7z" />
@@ -146,31 +158,42 @@ const DenseTracklist = ({
             <div
               key={song.id || `${song.name}-${idx}`}
               onClick={() => handleRowClick(song)}
-              className={`group flex md:grid md:grid-cols-12 items-center gap-3 md:gap-4 px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
+              className={`group flex md:grid md:grid-cols-12 items-center gap-3 md:gap-4 px-3 py-2.5 rounded-xl transition-all cursor-pointer border ${
                 isCurrent
-                  ? 'bg-cyan/10 border border-cyan/30 shadow-md shadow-cyan/5'
-                  : 'hover:bg-white/5 border border-transparent hover:border-white/10'
+                  ? 'shadow-md'
+                  : 'hover:bg-white/5 border-transparent hover:border-white/10'
               }`}
+              style={
+                isCurrent
+                  ? {
+                      backgroundColor: `${theme.accent}18`,
+                      borderColor: `${theme.accent}55`,
+                      boxShadow: `0 0 15px ${theme.glow}`,
+                    }
+                  : undefined
+              }
             >
               {/* Col 1: Index / Active Equalizer / Play icon */}
               <div className="w-6 md:w-auto md:col-span-1 flex items-center justify-center flex-shrink-0">
                 {isCurrent && isPlaying ? (
                   <div className="flex items-end gap-[2px] h-3.5">
-                    <span className="w-[3px] h-3 bg-cyan rounded-full animate-bounce [animation-delay:-0.3s]" />
-                    <span className="w-[3px] h-3.5 bg-cyan rounded-full animate-bounce [animation-delay:-0.15s]" />
-                    <span className="w-[3px] h-2 bg-cyan rounded-full animate-bounce" />
+                    <span className="w-[3px] h-3 rounded-full animate-bounce [animation-delay:-0.3s]" style={{ backgroundColor: theme.accent }} />
+                    <span className="w-[3px] h-3.5 rounded-full animate-bounce [animation-delay:-0.15s]" style={{ backgroundColor: theme.accent }} />
+                    <span className="w-[3px] h-2 rounded-full animate-bounce" style={{ backgroundColor: theme.accent }} />
                   </div>
                 ) : (
                   <>
                     <span
                       className={`text-xs font-mono group-hover:hidden ${
-                        isCurrent ? 'text-cyan font-bold' : 'text-slate-400'
+                        isCurrent ? 'font-bold' : 'text-slate-400'
                       }`}
+                      style={{ color: isCurrent ? theme.accent : undefined }}
                     >
                       {idx + 1}
                     </span>
                     <button
-                      className="hidden group-hover:inline-flex text-cyan hover:scale-110 transition-transform"
+                      className="hidden group-hover:inline-flex hover:scale-110 transition-transform"
+                      style={{ color: theme.accent }}
                       title="Play on Turntable"
                     >
                       <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
@@ -197,9 +220,8 @@ const DenseTracklist = ({
                 />
                 <div className="min-w-0">
                   <p
-                    className={`text-xs sm:text-sm font-semibold truncate ${
-                      isCurrent ? 'text-cyan' : 'text-white group-hover:text-cyan transition-colors'
-                    }`}
+                    className={`text-xs sm:text-sm font-semibold truncate transition-colors`}
+                    style={{ color: isCurrent ? theme.accent : undefined }}
                   >
                     {song.name}
                   </p>

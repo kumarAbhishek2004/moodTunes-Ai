@@ -407,17 +407,18 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
       {!isOpen && (
         <button
           onClick={onToggle}
-          className="fixed bottom-6 right-6 p-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full shadow-2xl hover:shadow-purple-500/50 transition-all duration-300 z-50 group transform hover:scale-110"
+          className="fixed bottom-20 sm:bottom-24 right-4 sm:right-6 p-3.5 sm:p-4 bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 rounded-full shadow-2xl hover:shadow-purple-500/50 transition-all duration-300 z-50 group transform hover:scale-110 border border-purple-400/40"
+          title="Open AI Music Assistant"
         >
           <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
-          <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
+          <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse border-2 border-gray-900"></span>
         </button>
       )}
 
       {isOpen && (
-        <div className="fixed bottom-6 right-6 w-96 h-[600px] bg-gray-900/95 backdrop-blur-lg rounded-2xl shadow-2xl border border-purple-500/30 flex flex-col z-50">
+        <div className="fixed bottom-20 sm:bottom-24 right-4 sm:right-6 w-[92vw] sm:w-96 max-h-[75vh] h-[580px] bg-gray-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-purple-500/40 flex flex-col z-50">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-purple-900/50 to-pink-900/50 rounded-t-2xl">
             <div className="flex items-center gap-3">

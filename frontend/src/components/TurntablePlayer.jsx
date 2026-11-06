@@ -13,7 +13,10 @@ import {
   toggleTurntable,
   toggleQueue,
   setVideoMode,
+  playSongAtIndex,
+  closePlayer,
 } from '../store/audioSlice';
+import { resolveMusicTheme } from '../utils/themeMap';
 import AddToPlaylistButton from './AddToPlaylistButton';
 
 const formatTime = (seconds) => {
@@ -40,6 +43,8 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
 
   const {
     currentSong,
+    queue,
+    currentIndex,
     isPlaying,
     currentTime,
     duration,
@@ -52,7 +57,20 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
   } = useSelector((state) => state.audio);
 
   const [isLiked, setIsLiked] = useState(false);
-  const moodColor = MOOD_GLOW_COLORS[activeMood?.toLowerCase()] || '#00F2FE';
+  const [playerTab, setPlayerTab] = useState(isVideoMode ? 'video' : 'vinyl');
+
+  // Strict guideline: colors totally based on song's mood and genre when playing!
+  const theme = resolveMusicTheme(currentSong, activeMood);
+  const moodColor = theme.accent;
+
+  // Sync tab with external isVideoMode changes
+  useEffect(() => {
+    if (isVideoMode && playerTab !== 'video') {
+      setPlayerTab('video');
+    } else if (!isVideoMode && playerTab === 'video') {
+      setPlayerTab('vinyl');
+    }
+  }, [isVideoMode]);
 
   useEffect(() => {
     if (!currentSong) return;
@@ -132,34 +150,55 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
       {/* Top Bar / Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-obsidian-800/60 mb-6 gap-3">
         <div className="flex items-center gap-3">
-          <span className="w-2.5 h-2.5 rounded-full bg-cyan animate-pulse" />
-          <h2 className="text-xs sm:text-sm font-bold text-white uppercase tracking-widest font-mono">
-            {isVideoMode ? 'HD Music Video Player' : 'Analog Vinyl Turntable'}
-          </h2>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-obsidian-800 text-slate-300 border border-obsidian-750">
-            {isVideoMode ? '1080p Video' : '33 ⅓ RPM'}
-          </span>
+          <span
+            className="w-2.5 h-2.5 rounded-full animate-pulse"
+            style={{ backgroundColor: moodColor, boxShadow: `0 0 8px ${moodColor}` }}
+          />
+          <div>
+            <h2 className="text-xs sm:text-sm font-bold text-white uppercase tracking-widest font-mono">
+              {playerTab === 'queue'
+                ? 'Active Music Queue'
+                : playerTab === 'video'
+                ? 'HD Music Video Player'
+                : 'Analog Vinyl Turntable'}
+            </h2>
+            <p className="text-[10px] text-slate-400 font-mono">
+              Genre: <span style={{ color: moodColor }}>{theme.name}</span> • {playerTab === 'video' ? '1080p Stream' : '33 ⅓ RPM Hi-Fi'}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2.5 self-end sm:self-auto">
-          {/* Dual Audio / Video Section Toggle Switcher (Requirement 3) */}
-          <div className="flex items-center p-0.5 rounded-xl bg-obsidian-950/80 border border-white/10 shadow-inner">
+          {/* Tri-Mode Switcher: Vinyl Audio / Music Video / Queue */}
+          <div className="flex items-center p-0.5 rounded-xl bg-obsidian-950/90 border border-white/10 shadow-inner">
             <button
-              onClick={() => dispatch(setVideoMode(false))}
+              onClick={() => {
+                setPlayerTab('vinyl');
+                dispatch(setVideoMode(false));
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                !isVideoMode
-                  ? 'bg-cyan/20 text-cyan border border-cyan/40 shadow-sm'
+                playerTab === 'vinyl'
+                  ? 'shadow-sm border'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title="Switch to Analog Vinyl Audio"
+              style={{
+                backgroundColor: playerTab === 'vinyl' ? `${moodColor}22` : undefined,
+                borderColor: playerTab === 'vinyl' ? `${moodColor}55` : undefined,
+                color: playerTab === 'vinyl' ? moodColor : undefined,
+              }}
+              title="Switch to Analog Vinyl Turntable"
             >
               <span>🎵</span>
               <span>Vinyl Audio</span>
             </button>
+
             <button
-              onClick={() => dispatch(setVideoMode(true))}
+              onClick={() => {
+                setPlayerTab('video');
+                dispatch(setVideoMode(true));
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                isVideoMode
+                playerTab === 'video'
                   ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
@@ -168,140 +207,348 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
               <span>🎬</span>
               <span>Music Video</span>
             </button>
+
+            <button
+              onClick={() => {
+                setPlayerTab('queue');
+                dispatch(setVideoMode(false));
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                playerTab === 'queue'
+                  ? 'shadow-sm border'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              style={{
+                backgroundColor: playerTab === 'queue' ? `${moodColor}22` : undefined,
+                borderColor: playerTab === 'queue' ? `${moodColor}55` : undefined,
+                color: playerTab === 'queue' ? moodColor : undefined,
+              }}
+              title="Show Queue & Change Tracks"
+            >
+              <span>≡</span>
+              <span>Queue ({queue.length})</span>
+            </button>
           </div>
 
           <button
             onClick={handleClose}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-white bg-obsidian-900/80 hover:bg-obsidian-800 border border-obsidian-750 transition-colors"
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-white bg-obsidian-900/80 hover:bg-obsidian-800 border border-obsidian-750 transition-colors cursor-pointer"
             title="Minimize to Bottom Bar"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
+
+          <button
+            onClick={() => dispatch(closePlayer())}
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 bg-obsidian-900/80 border border-obsidian-750 transition-colors cursor-pointer"
+            title="Remove Player from Screen (Stop & Close)"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       </div>
 
-      {/* Main Showcase Stage: Vinyl Disc OR Music Video (Requirement 3) */}
-      <div className="relative flex flex-col lg:flex-row items-center justify-around gap-8 sm:gap-12 my-6">
-        {/* Dynamic Color Bleed Halo behind Player */}
-        <div
-          className="absolute w-80 h-80 sm:w-96 sm:h-96 rounded-full blur-3xl opacity-30 transition-all duration-1000 pointer-events-none"
-          style={{ backgroundColor: isVideoMode ? '#EF4444' : moodColor }}
-        />
-
-        {/* EITHER: 16:9 Widescreen Music Video Section OR 12" Vinyl Disc */}
-        {isVideoMode ? (
-          <div className="flex flex-col items-center w-full max-w-lg">
-            <div className="relative w-full aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-black flex flex-col justify-between group">
-              <iframe
-                src={youtubeEmbedUrl}
-                title={`${currentSong.name} - ${currentSong.artist}`}
-                className="w-full h-full border-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              />
-
-              {/* Video Badge Overlay */}
-              <div className="absolute top-2 left-2 z-10 pointer-events-none flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[10px] font-mono text-rose-400 border border-rose-500/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                <span>HD Music Video</span>
-              </div>
+      {/* Main Showcase Stage: EITHER Queue List OR Vinyl/Video View */}
+      {playerTab === 'queue' ? (
+        <div className="w-full space-y-4 my-2 animate-fadeIn">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/10 gap-2">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <span>Active Music Stream Queue</span>
+                <span
+                  className="text-[11px] font-mono px-2.5 py-0.5 rounded-full border"
+                  style={{
+                    color: moodColor,
+                    borderColor: `${moodColor}40`,
+                    backgroundColor: `${moodColor}15`,
+                  }}
+                >
+                  {queue.length} Tracks Loaded
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Click any track below to change playback instantly. Genre: <span style={{ color: moodColor }}>{theme.name}</span>.
+              </p>
             </div>
 
-            {/* Quick Switch Button to Vinyl */}
-            <button
-              onClick={() => dispatch(setVideoMode(false))}
-              className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 hover:bg-cyan/20 text-slate-300 hover:text-cyan border border-white/10 hover:border-cyan/30 text-xs font-semibold transition-all hover:scale-105"
-            >
-              <span>🎵 Switch to Analog Vinyl Turntable</span>
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center">
-            {/* 12" Vinyl Disc Enclosure */}
-            <div className="relative w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96 flex items-center justify-center">
-              {/* Turntable Platter Base */}
-              <div
-                className="absolute inset-0 rounded-full bg-obsidian-950 border border-obsidian-800 shadow-2xl"
-                style={{
-                  boxShadow: `0 25px 60px -15px rgba(0,0,0,0.9), 0 0 30px ${moodColor}33`,
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setPlayerTab('vinyl');
+                  dispatch(setVideoMode(false));
                 }}
-              />
-
-              {/* Rotating Vinyl Record */}
-              <div
-                className={`relative w-[92%] h-[92%] rounded-full bg-[#0a0a0a] flex items-center justify-center shadow-2xl transition-transform ${
-                  isPlaying ? 'animate-spin [animation-duration:6s]' : ''
-                }`}
-                style={{
-                  boxShadow: 'inset 0 0 30px rgba(0,0,0,0.9), 0 4px 15px rgba(0,0,0,0.6)',
-                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 border border-white/15 text-xs font-semibold transition-all hover:scale-102"
               >
-                {/* Concentric Vinyl Grooves */}
-                <div className="absolute inset-4 rounded-full border border-white/5 opacity-50" />
-                <div className="absolute inset-8 rounded-full border border-white/5 opacity-60" />
-                <div className="absolute inset-12 rounded-full border border-white/5 opacity-70" />
-                <div className="absolute inset-16 rounded-full border border-white/5 opacity-50" />
-                <div className="absolute inset-20 rounded-full border border-white/5 opacity-60" />
-                <div className="absolute inset-24 rounded-full border border-white/5 opacity-40" />
+                <span>🎵 Return to Vinyl</span>
+              </button>
+              <button
+                onClick={() => {
+                  setPlayerTab('video');
+                  dispatch(setVideoMode(true));
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-all hover:scale-102"
+              >
+                <span>🎬 Watch Video</span>
+              </button>
+            </div>
+          </div>
 
-                {/* High-Gloss Vinyl Sheen Overlay */}
+          {/* Scrollable Queue Track List with Direct Track Changing */}
+          <div className="max-h-[50vh] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+            {queue.map((song, idx) => {
+              const isCurrent =
+                currentSong &&
+                (currentSong.id === song.id ||
+                  (currentSong.name === song.name && currentSong.artist === song.artist));
+
+              return (
                 <div
-                  className="absolute inset-0 rounded-full pointer-events-none opacity-25"
+                  key={song.id || `${song.name}-${idx}`}
+                  onClick={() => dispatch(playSongAtIndex(idx))}
+                  className={`group flex items-center justify-between p-3 rounded-2xl transition-all cursor-pointer border ${
+                    isCurrent
+                      ? 'border-cyan/40 shadow-lg'
+                      : 'bg-obsidian-900/60 hover:bg-obsidian-800/80 border-white/5 hover:border-white/15'
+                  }`}
                   style={{
-                    background:
-                      'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, transparent 40%, rgba(255,255,255,0.2) 60%, transparent 100%)',
+                    borderColor: isCurrent ? `${moodColor}80` : undefined,
+                    backgroundColor: isCurrent ? `${moodColor}20` : undefined,
+                  }}
+                >
+                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                    {/* Index / Equalizer */}
+                    <div className="w-7 flex items-center justify-center flex-shrink-0">
+                      {isCurrent && isPlaying ? (
+                        <div className="flex items-end gap-0.5 h-3.5">
+                          <span className="w-1 rounded-full animate-bounce h-full" style={{ backgroundColor: moodColor }} />
+                          <span className="w-1 rounded-full animate-bounce [animation-delay:-0.15s] h-2/3" style={{ backgroundColor: moodColor }} />
+                          <span className="w-1 rounded-full animate-bounce [animation-delay:-0.3s] h-4/5" style={{ backgroundColor: moodColor }} />
+                        </div>
+                      ) : (
+                        <span
+                          className={`text-xs font-mono ${isCurrent ? 'font-bold' : 'text-slate-500 group-hover:text-white'}`}
+                          style={{ color: isCurrent ? moodColor : undefined }}
+                        >
+                          #{idx + 1}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Artwork */}
+                    <img
+                      src={song.image || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&auto=format&fit=crop&q=80'}
+                      alt={song.name}
+                      className="w-11 h-11 rounded-xl object-cover bg-obsidian-950 flex-shrink-0 shadow-md"
+                      onError={(e) => {
+                        e.target.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&auto=format&fit=crop&q=80';
+                      }}
+                    />
+
+                    {/* Title & Artist */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4
+                          className={`text-xs sm:text-sm font-bold truncate transition-colors ${
+                            isCurrent ? 'text-white' : 'text-slate-200 group-hover:text-white'
+                          }`}
+                        >
+                          {song.name}
+                        </h4>
+                        {isCurrent && (
+                          <span
+                            className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-white/10 uppercase font-bold"
+                            style={{ color: moodColor }}
+                          >
+                            Playing Now
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                        {song.artist}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Right: Mood/Genre & Duration */}
+                  <div className="flex items-center gap-3 flex-shrink-0 ml-3">
+                    <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-obsidian-950 text-slate-400 border border-white/10 capitalize">
+                      {song.mood_match || song.genre || 'Stream'}
+                    </span>
+
+                    <span className="text-xs font-mono text-slate-400 w-10 text-right">
+                      {formatTime(song.duration)}
+                    </span>
+
+                    <button
+                      className="p-2 rounded-xl text-slate-400 group-hover:text-white group-hover:scale-110 transition-transform"
+                      style={{ color: isCurrent ? moodColor : undefined }}
+                      title="Play track now"
+                    >
+                      <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        /* Main Showcase Stage: Vinyl Disc OR Music Video */
+        <div className="relative flex flex-col lg:flex-row items-center justify-around gap-8 sm:gap-12 my-6">
+          {/* Dynamic Color Bleed Halo behind Player (matches track's mood/genre) */}
+          <div
+            className="absolute w-80 h-80 sm:w-96 sm:h-96 rounded-full blur-3xl opacity-30 transition-all duration-1000 pointer-events-none"
+            style={{ backgroundColor: moodColor }}
+          />
+
+          {/* EITHER: 16:9 Widescreen Music Video Section OR 12" Vinyl Disc */}
+          {playerTab === 'video' ? (
+            <div className="flex flex-col items-center w-full max-w-lg animate-fadeIn">
+              <div className="relative w-full aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-black flex flex-col justify-between group">
+                <iframe
+                  src={youtubeEmbedUrl}
+                  title={`${currentSong.name} - ${currentSong.artist}`}
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+
+                {/* Video Badge Overlay */}
+                <div className="absolute top-2 left-2 z-10 pointer-events-none flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[10px] font-mono text-rose-400 border border-rose-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                  <span>HD Music Video</span>
+                </div>
+              </div>
+
+              {/* Quick Switch Buttons */}
+              <div className="flex items-center gap-2 mt-3">
+                <button
+                  onClick={() => {
+                    setPlayerTab('vinyl');
+                    dispatch(setVideoMode(false));
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 hover:bg-cyan/20 text-slate-300 hover:text-cyan border border-white/10 hover:border-cyan/30 text-xs font-semibold transition-all hover:scale-105"
+                >
+                  <span>🎵 Switch to Vinyl</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setPlayerTab('queue');
+                    dispatch(setVideoMode(false));
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white border border-white/10 text-xs font-semibold transition-all hover:scale-105"
+                  style={{ color: moodColor }}
+                >
+                  <span>≡ View Queue ({queue.length})</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center animate-fadeIn">
+              {/* 12" Vinyl Disc Enclosure */}
+              <div className="relative w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96 flex items-center justify-center">
+                {/* Turntable Platter Base */}
+                <div
+                  className="absolute inset-0 rounded-full bg-obsidian-950 border border-obsidian-800 shadow-2xl"
+                  style={{
+                    boxShadow: `0 25px 60px -15px rgba(0,0,0,0.9), 0 0 35px ${moodColor}44`,
                   }}
                 />
 
-                {/* Center Album Art Label */}
-                <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden border-4 border-obsidian-950 shadow-inner flex items-center justify-center bg-obsidian-900">
-                  <img
-                    src={
-                      currentSong.image ||
-                      'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80'
-                    }
-                    alt={currentSong.name}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.target.src =
-                        'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80';
+                {/* Rotating Vinyl Record */}
+                <div
+                  className={`relative w-[92%] h-[92%] rounded-full bg-[#0a0a0a] flex items-center justify-center shadow-2xl transition-transform ${
+                    isPlaying ? 'animate-spin [animation-duration:6s]' : ''
+                  }`}
+                  style={{
+                    boxShadow: 'inset 0 0 30px rgba(0,0,0,0.9), 0 4px 15px rgba(0,0,0,0.6)',
+                  }}
+                >
+                  {/* Concentric Vinyl Grooves */}
+                  <div className="absolute inset-4 rounded-full border border-white/5 opacity-50" />
+                  <div className="absolute inset-8 rounded-full border border-white/5 opacity-60" />
+                  <div className="absolute inset-12 rounded-full border border-white/5 opacity-70" />
+                  <div className="absolute inset-16 rounded-full border border-white/5 opacity-50" />
+                  <div className="absolute inset-20 rounded-full border border-white/5 opacity-60" />
+                  <div className="absolute inset-24 rounded-full border border-white/5 opacity-40" />
+
+                  {/* High-Gloss Vinyl Sheen Overlay */}
+                  <div
+                    className="absolute inset-0 rounded-full pointer-events-none opacity-25"
+                    style={{
+                      background:
+                        'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, transparent 40%, rgba(255,255,255,0.2) 60%, transparent 100%)',
                     }}
                   />
-                  {/* Center Spindle Hole */}
-                  <div className="absolute w-4 h-4 rounded-full bg-obsidian-950 border-2 border-white/40 shadow-inner" />
+
+                  {/* Center Album Art Label */}
+                  <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden border-4 border-obsidian-950 shadow-inner flex items-center justify-center bg-obsidian-900">
+                    <img
+                      src={
+                        currentSong.image ||
+                        'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80'
+                      }
+                      alt={currentSong.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.src =
+                          'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80';
+                      }}
+                    />
+                    {/* Center Spindle Hole */}
+                    <div className="absolute w-4 h-4 rounded-full bg-obsidian-950 border-2 border-white/40 shadow-inner" />
+                  </div>
+                </div>
+
+                {/* Mechanical Tonearm Assembly */}
+                <div
+                  className={`absolute -top-4 -right-4 w-28 h-48 sm:w-36 sm:h-56 pointer-events-none origin-top-right transition-transform duration-700 ease-out z-20 ${
+                    isPlaying ? 'rotate-12 translate-x-1' : '-rotate-6'
+                  }`}
+                >
+                  {/* Pivot Base */}
+                  <div className="absolute top-2 right-2 w-8 h-8 rounded-full bg-gradient-to-br from-slate-400 to-slate-700 border border-slate-400 shadow-md flex items-center justify-center">
+                    <div className="w-3 h-3 rounded-full bg-slate-900" />
+                  </div>
+                  {/* Curved Metallic Arm */}
+                  <div className="absolute top-6 right-5 w-1.5 h-36 bg-gradient-to-b from-slate-300 via-slate-400 to-slate-600 rounded-full shadow-lg transform -rotate-12 origin-top" />
+                  {/* Cartridge & Stylus Needle */}
+                  <div className="absolute bottom-6 left-6 w-4 h-7 bg-slate-900 border border-slate-600 rounded-sm shadow-md flex flex-col items-center justify-end">
+                    <div className="w-1 h-1.5 bg-amber-400 rounded-full" />
+                  </div>
                 </div>
               </div>
 
-              {/* Mechanical Tonearm Assembly */}
-              <div
-                className={`absolute -top-4 -right-4 w-28 h-48 sm:w-36 sm:h-56 pointer-events-none origin-top-right transition-transform duration-700 ease-out z-20 ${
-                  isPlaying ? 'rotate-12 translate-x-1' : '-rotate-6'
-                }`}
-              >
-                {/* Pivot Base */}
-                <div className="absolute top-2 right-2 w-8 h-8 rounded-full bg-gradient-to-br from-slate-400 to-slate-700 border border-slate-400 shadow-md flex items-center justify-center">
-                  <div className="w-3 h-3 rounded-full bg-slate-900" />
-                </div>
-                {/* Curved Metallic Arm */}
-                <div className="absolute top-6 right-5 w-1.5 h-36 bg-gradient-to-b from-slate-300 via-slate-400 to-slate-600 rounded-full shadow-lg transform -rotate-12 origin-top" />
-                {/* Cartridge & Stylus Needle */}
-                <div className="absolute bottom-6 left-6 w-4 h-7 bg-slate-900 border border-slate-600 rounded-sm shadow-md flex flex-col items-center justify-end">
-                  <div className="w-1 h-1.5 bg-amber-400 rounded-full" />
-                </div>
+              {/* Quick Switch Buttons */}
+              <div className="flex items-center gap-2 mt-3">
+                <button
+                  onClick={() => {
+                    setPlayerTab('video');
+                    dispatch(setVideoMode(true));
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 hover:bg-rose-500/20 text-slate-300 hover:text-rose-300 border border-white/10 hover:border-rose-500/30 text-xs font-semibold transition-all hover:scale-105"
+                >
+                  <span>🎬 Watch Video</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setPlayerTab('queue');
+                    dispatch(setVideoMode(false));
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white border border-white/10 text-xs font-semibold transition-all hover:scale-105"
+                  style={{ color: moodColor }}
+                >
+                  <span>≡ View Queue ({queue.length})</span>
+                </button>
               </div>
             </div>
-
-            {/* Quick Switch Button to Video */}
-            <button
-              onClick={() => dispatch(setVideoMode(true))}
-              className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 hover:bg-rose-500/20 text-slate-300 hover:text-rose-300 border border-white/10 hover:border-rose-500/30 text-xs font-semibold transition-all hover:scale-105"
-            >
-              <span>🎬 Watch Official Music Video</span>
-            </button>
-          </div>
-        )}
+          )}
 
         {/* Right Stage: Now Playing Info & Explainable AI */}
         <div className="flex-1 max-w-md w-full space-y-4 text-center lg:text-left">
@@ -455,8 +702,36 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
             {/* Add to Playlist */}
             <AddToPlaylistButton song={currentSong} compact={true} />
           </div>
+
+          {/* Quick "Up Next in Queue" switcher card (direct track changing) */}
+          {queue.length > 1 && (
+            <div
+              onClick={() => setPlayerTab('queue')}
+              className="p-3 rounded-2xl bg-obsidian-950/70 border border-white/10 hover:border-white/20 transition-all cursor-pointer group flex items-center justify-between gap-3 mt-4"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-base">📋</span>
+                <div className="min-w-0 text-left">
+                  <span className="text-[10px] uppercase font-mono tracking-wider block text-slate-400">
+                    Up Next in Queue ({queue.length} Tracks)
+                  </span>
+                  <p className="text-xs font-bold text-white group-hover:underline truncate mt-0.5">
+                    {queue[(currentIndex + 1) % queue.length]?.name || 'Next track'} • {queue[(currentIndex + 1) % queue.length]?.artist}
+                  </p>
+                </div>
+              </div>
+              <span
+                className="text-[11px] font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform flex-shrink-0"
+                style={{ color: moodColor }}
+              >
+                <span>Change Track</span>
+                <span>→</span>
+              </span>
+            </div>
+          )}
         </div>
       </div>
+    )}
     </div>
   );
 };

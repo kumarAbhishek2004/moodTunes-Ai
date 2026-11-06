@@ -28,7 +28,7 @@ export const MOOD_NODES = [
     textClass: 'text-emerald',
     borderClass: 'border-emerald/40',
     bgClass: 'bg-emerald/15',
-    mappedMood: 'calm',
+    mappedMood: 'focus',
   },
   {
     id: 'energetic',
@@ -67,7 +67,7 @@ export const MOOD_NODES = [
     textClass: 'text-pink-400',
     borderClass: 'border-pink-400/40',
     bgClass: 'bg-pink-400/15',
-    mappedMood: 'happy',
+    mappedMood: 'romantic',
   },
   {
     id: 'sad',
@@ -100,7 +100,13 @@ const findClosestNode = (angle) => {
   return closest;
 };
 
-const RotaryMoodDial = ({ onSelectMood, onCurateStream, showCurateButton = true }) => {
+const RotaryMoodDial = ({
+  onSelectMood,
+  onCurateStream,
+  showCurateButton = true,
+  compact = false,
+  showPills = true,
+}) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
@@ -213,12 +219,12 @@ const RotaryMoodDial = ({ onSelectMood, onCurateStream, showCurateButton = true 
   const ticks = Array.from({ length: 36 }, (_, i) => i * 10);
 
   return (
-    <div className="flex flex-col items-center select-none w-full max-w-xl mx-auto p-4 sm:p-6">
+    <div className={`flex flex-col items-center select-none w-full ${compact ? 'p-0 max-w-sm' : 'max-w-xl p-4 sm:p-6'} mx-auto`}>
       {/* Outer Glow Halo container */}
-      <div className="relative flex items-center justify-center py-6">
+      <div className={`relative flex items-center justify-center ${compact ? 'py-0 my-0 scale-[0.56] sm:scale-[0.60] origin-center -my-8 sm:-my-8' : 'py-6'}`}>
         {/* Dynamic Bloom Aura matching active mood */}
         <div
-          className="absolute w-72 h-72 sm:w-80 sm:h-80 rounded-full blur-3xl opacity-30 transition-all duration-700 pointer-events-none"
+          className={`absolute ${compact ? 'w-56 h-56' : 'w-72 h-72 sm:w-80 sm:h-80'} rounded-full blur-3xl opacity-30 transition-all duration-700 pointer-events-none`}
           style={{ backgroundColor: activeNode.color }}
         />
 
@@ -356,32 +362,34 @@ const RotaryMoodDial = ({ onSelectMood, onCurateStream, showCurateButton = true 
       </div>
 
       {/* Empathetic Vibe Descriptor */}
-      <div className="text-center mt-3 mb-5 max-w-sm px-4">
+      <div className={`text-center ${compact ? 'mt-2 mb-3' : 'mt-3 mb-5'} max-w-sm px-4`}>
         <p className="text-xs sm:text-sm text-slate-300 transition-all duration-300 leading-relaxed">
           {activeNode.tagline}
         </p>
       </div>
 
       {/* Accessible Quick-Preset Pills */}
-      <div className="w-full flex items-center justify-center flex-wrap gap-2 mb-6">
-        {MOOD_NODES.map((node) => {
-          const isSelected = activeNode.id === node.id;
-          return (
-            <button
-              key={node.id}
-              onClick={() => selectNode(node)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                isSelected
-                  ? `${node.bgClass} ${node.textClass} border ${node.borderClass} ${node.glowClass} scale-105`
-                  : 'bg-obsidian-900/90 text-slate-400 border border-obsidian-800 hover:text-white hover:border-obsidian-700'
-              }`}
-            >
-              <span>{node.emoji}</span>
-              <span>{node.name}</span>
-            </button>
-          );
-        })}
-      </div>
+      {showPills && (
+        <div className={`w-full flex items-center justify-center flex-wrap gap-1.5 sm:gap-2 ${compact ? 'mb-2' : 'mb-6'}`}>
+          {MOOD_NODES.map((node) => {
+            const isSelected = activeNode.id === node.id;
+            return (
+              <button
+                key={node.id}
+                onClick={() => selectNode(node)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  isSelected
+                    ? `${node.bgClass} ${node.textClass} border ${node.borderClass} ${node.glowClass} scale-105`
+                    : 'bg-obsidian-900/90 text-slate-400 border border-obsidian-800 hover:text-white hover:border-obsidian-700'
+                }`}
+              >
+                <span>{node.emoji}</span>
+                <span>{node.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Curate Stream CTA Button */}
       {showCurateButton && (

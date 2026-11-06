@@ -1,11 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import axios from 'axios';
+import { API_BASE_URL } from '../config/api';
 import {
   setPlaying,
   playNext,
   setProgress,
   clearSeekTarget,
+  updateSongYouTubeId,
 } from '../store/audioSlice';
+import { resolveKnownYouTubeId } from '../utils/songMap';
 
 /**
  * PersistentAudioEngine
@@ -91,9 +95,23 @@ const PersistentAudioEngine = () => {
             }
           },
           onError: (err) => {
-            console.warn('YouTube Player error, advancing track:', err.data);
-            // On embed error (e.g. video blocked or restricted), auto-advance
-            dispatch(playNext());
+            console.warn('YouTube Player error:', err.data);
+            // If the video cannot be embedded or is restricted, attempt an alternate search for the same song
+            if (currentSong && (err.data === 101 || err.data === 150 || err.data === 2)) {
+              axios
+                .get(`${API_BASE_URL}/youtube/search`, {
+                  params: { song_name: `${currentSong.name} audio`, artist: currentSong.artist || '' },
+                  timeout: 4000,
+                })
+                .then((res) => {
+                  const altId = res.data?.video_id;
+                  if (altId && altId !== currentSong.youtube_id && playerRef.current?.loadVideoById) {
+                    dispatch(updateSongYouTubeId({ id: currentSong.id, name: currentSong.name, artist: currentSong.artist, youtube_id: altId }));
+                    playerRef.current.loadVideoById(altId);
+                  }
+                })
+                .catch(() => {});
+            }
           },
         },
       });
@@ -104,17 +122,89 @@ const PersistentAudioEngine = () => {
 
   // 2. Track changes when currentSong updates
   useEffect(() => {
-    if (!playerRef.current || !playerRef.current.loadVideoById) return;
+    if (!currentSong) return;
 
-    if (currentSong?.youtube_id) {
-      const vidId = currentSong.youtube_id;
-      if (isPlaying) {
-        playerRef.current.loadVideoById(vidId);
-      } else {
-        playerRef.current.cueVideoById(vidId);
+    // Immediately stop or pause previous audio so the PREVIOUS track NEVER continues playing!
+    if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
+      try {
+        playerRef.current.pauseVideo();
+      } catch (e) {}
+    }
+
+    const loadAndPlay = (vidId) => {
+      if (!playerRef.current || typeof playerRef.current.loadVideoById !== 'function') return;
+      try {
+        if (isPlaying) {
+          playerRef.current.loadVideoById(vidId);
+        } else {
+          playerRef.current.cueVideoById(vidId);
+        }
+      } catch (e) {
+        console.error('Error loading video by ID:', e);
+      }
+    };
+
+    // Verify if currentSong has a valid YouTube ID that actually belongs to it
+    const isRaataan = String(currentSong.name || '').toLowerCase().includes('raataan');
+    let effectiveVidId = currentSong.youtube_id;
+
+    // Discard wrongly assigned fallback ID (Raataan Lambiyan) for non-Raataan tracks
+    if (effectiveVidId === 'gvyUuxdRdR4' && !isRaataan) {
+      effectiveVidId = null;
+    }
+
+    // Check fast known songs map (e.g. Love Dose -> TvngY4unyL4)
+    if (!effectiveVidId) {
+      effectiveVidId = resolveKnownYouTubeId(currentSong.name, currentSong.artist);
+      if (effectiveVidId) {
+        dispatch(updateSongYouTubeId({ id: currentSong.id, name: currentSong.name, artist: currentSong.artist, youtube_id: effectiveVidId }));
       }
     }
-  }, [currentSong?.id, currentSong?.youtube_id]);
+
+    if (effectiveVidId) {
+      loadAndPlay(effectiveVidId);
+      return;
+    }
+
+    // If still no video ID, dynamically query the backend for this exact song
+    let isCancelled = false;
+    axios
+      .get(`${API_BASE_URL}/youtube/search`, {
+        params: { song_name: currentSong.name, artist: currentSong.artist || '' },
+        timeout: 5000,
+      })
+      .then((res) => {
+        if (isCancelled) return;
+        const resolvedId = res.data?.video_id || res.data?.youtube_id;
+        if (resolvedId) {
+          dispatch(updateSongYouTubeId({ id: currentSong.id, name: currentSong.name, artist: currentSong.artist, youtube_id: resolvedId }));
+          loadAndPlay(resolvedId);
+        }
+      })
+      .catch(() => {
+        // Fallback to /search-song
+        axios
+          .get(`${API_BASE_URL}/search-song`, {
+            params: { name: currentSong.name, artist: currentSong.artist || '' },
+            timeout: 5000,
+          })
+          .then((res2) => {
+            if (isCancelled) return;
+            const resolvedId2 = res2.data?.youtube_id || res2.data?.video_id;
+            if (resolvedId2) {
+              dispatch(updateSongYouTubeId({ id: currentSong.id, name: currentSong.name, artist: currentSong.artist, youtube_id: resolvedId2 }));
+              loadAndPlay(resolvedId2);
+            }
+          })
+          .catch((err2) => {
+            console.warn('Could not resolve YouTube ID for track:', currentSong.name, err2);
+          });
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentSong?.id, currentSong?.name, currentSong?.artist, currentSong?.youtube_id]);
 
   // 3. Sync Play / Pause
   useEffect(() => {
@@ -124,11 +214,20 @@ const PersistentAudioEngine = () => {
       const state = playerRef.current.getPlayerState();
       if (isPlaying && state !== 1 && state !== 3) {
         playerRef.current.playVideo();
-      } else if (!isPlaying && state === 1) {
+      } else if (!isPlaying) {
         playerRef.current.pauseVideo();
       }
     } catch (e) {}
   }, [isPlaying]);
+
+  // 3.1 Stop video if song is cleared
+  useEffect(() => {
+    if (!currentSong && playerRef.current && typeof playerRef.current.stopVideo === 'function') {
+      try {
+        playerRef.current.stopVideo();
+      } catch (e) {}
+    }
+  }, [currentSong]);
 
   // 4. Sync Volume & Mute
   useEffect(() => {

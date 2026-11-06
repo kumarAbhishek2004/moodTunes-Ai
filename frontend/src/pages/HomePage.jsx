@@ -6,6 +6,17 @@ import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 import { playSong, setQueue, setActiveMood } from '../store/audioSlice';
 import FavoriteTracksSection from '../components/FavoriteTracksSection';
+import RotaryMoodDial from '../components/RotaryMoodDial';
+import Chatbot from '../components/Chatbot';
+
+const MOOD_WALLPAPERS = {
+  happy: '/assets/aura-hero-bg.jpg',
+  romantic: '/assets/aura-romantic-bg.jpg',
+  calm: '/assets/aura-calm-bg.jpg',
+  focus: '/assets/aura-focus-bg.jpg',
+  energetic: '/assets/aura-energetic-bg.jpg',
+  sad: '/assets/aura-sad-bg.jpg',
+};
 
 const MOOD_META = {
   happy: {
@@ -125,6 +136,7 @@ const HomePage = () => {
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const [isTypeOpen, setIsTypeOpen] = useState(false);
+  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
 
   const [sceneInput, setSceneInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -135,6 +147,7 @@ const HomePage = () => {
 
   const displayName = user?.full_name ? user.full_name.split(' ')[0] : 'Abhishek';
   const mood = MOOD_META[activeMoodKey.toLowerCase()] || MOOD_META.happy;
+
 
   // Restore stored mood & confidence on mount
   useEffect(() => {
@@ -254,6 +267,29 @@ const HomePage = () => {
     navigate('/preferences');
   };
 
+  // Turn Rotary Mood Dial on front page to morph atmosphere dynamically
+  const handleDialSelectMood = (node) => {
+    const cleanMood = (node.mappedMood || node.id).toLowerCase();
+    setDetectionSource('manual');
+    setFaceConfidence(null);
+    dispatch(setActiveMood(node.id));
+
+    try {
+      localStorage.setItem('selectedMood', JSON.stringify({
+        mood: cleanMood,
+        source: 'manual',
+        confidence: 1.0,
+        mood_distribution: { [cleanMood]: 100 },
+      }));
+    } catch (e) {}
+  };
+
+  // Launch Recommendation Engine personalization flow
+  const handleCurateWithPreferences = (nodeOrMood) => {
+    const targetKey = (nodeOrMood?.mappedMood || nodeOrMood?.id || nodeOrMood?.name || activeMoodKey).toLowerCase();
+    handleSelectManualMood(targetKey);
+  };
+
   // ==============================================================
   // 3. TEXT / SCENE PIPELINE -> DIRECT TO PREFERENCES WORKFLOW
   // ==============================================================
@@ -339,47 +375,61 @@ const HomePage = () => {
   return (
     <div className="relative w-full min-h-[calc(100vh-5rem)] flex flex-col justify-between p-4 sm:p-6 lg:p-8 animate-fadeIn">
       {/* ============================================================== */}
-      {/* CINEMATIC FULL-BLEED ARTWORK BACKGROUND                        */}
-      {/* Boy with headphones on rocks gazing at cosmic dusk sunset ring */}
+      {/* CINEMATIC FULL-BLEED MOOD-ADAPTIVE ARTWORK WALLPAPERS          */}
+      {/* Tailored anime backgrounds crossfading smoothly per mood       */}
       {/* ============================================================== */}
-      <div
-        className="fixed inset-0 pointer-events-none z-0 bg-cover bg-center transition-all duration-1000"
-        style={{
-          backgroundImage: `url('/assets/aura-hero-bg.jpg')`,
-          backgroundPosition: 'center 40%',
-        }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-t from-obsidian-950 via-obsidian-950/40 to-obsidian-950/70" />
-        <div className="absolute inset-0 bg-radial-vignette opacity-60" />
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden bg-obsidian-950">
+        {Object.entries(MOOD_WALLPAPERS).map(([moodKey, bgUrl]) => {
+          const isActive = activeMoodKey.toLowerCase() === moodKey;
+          return (
+            <div
+              key={moodKey}
+              className={`absolute inset-0 bg-cover transition-opacity duration-1000 ease-in-out ${
+                isActive ? 'opacity-100' : 'opacity-0'
+              }`}
+              style={{
+                backgroundImage: `url('${bgUrl}')`,
+                backgroundPosition: moodKey === 'romantic' ? 'center 35%' : 'center 20%',
+              }}
+            />
+          );
+        })}
+
+        {/* Soft atmospheric bottom fade gradient into deep obsidian */}
+        <div className="absolute inset-0 bg-gradient-to-t from-obsidian-950 via-obsidian-950/25 to-obsidian-950/45" />
+
+        {/* Subtle cinematic vignette */}
+        <div className="absolute inset-0 bg-radial-vignette opacity-35" />
       </div>
 
       {/* Main Container Stage */}
       <div className="relative z-10 max-w-7xl mx-auto w-full flex-1 flex flex-col justify-between space-y-8 sm:space-y-12">
         {/* ============================================================== */}
-        {/* TOP HERO ROW: Left Headline + Right Floating Emotion Card     */}
+        {/* TOP HERO ROW: Left Headline + Right Low-Profile Tactile Dial   */}
         {/* ============================================================== */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start pt-4 sm:pt-8">
-          {/* LEFT: Greeting, Headline & Clean Dual Option: Face vs Manual */}
-          <div className="lg:col-span-7 space-y-4 sm:space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-end pt-2 sm:pt-4">
+          {/* LEFT: Greeting, Headline & Primary Choices */}
+          <div className="lg:col-span-7 xl:col-span-7 space-y-3 sm:space-y-4 pb-1">
             <div>
-              <p className="text-sm sm:text-base font-semibold text-slate-200 tracking-wide drop-shadow-md">
+              <p className="text-sm font-semibold text-slate-200 tracking-wide drop-shadow-md">
                 Hi {displayName} 👋
               </p>
-              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight mt-1 drop-shadow-lg">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight mt-1 drop-shadow-lg">
                 {mood.headline}
               </h1>
-              <p className="text-xs sm:text-sm text-slate-300 max-w-lg mt-2 leading-relaxed drop-shadow">
+              <p className="text-xs sm:text-sm text-slate-300 max-w-md mt-1.5 leading-relaxed drop-shadow">
                 {mood.subtitle}
               </p>
             </div>
 
             {/* Clear Primary Choices: Detect Mood with Face OR Manually Select */}
-            <div className="space-y-3 pt-2">
-              <div className="flex flex-wrap items-center gap-3">
+            <div className="space-y-2.5 pt-1">
+              <div className="flex flex-wrap items-center gap-2.5">
                 {/* 1. 📸 Detect Mood with Face (Primary AI Scanner) */}
                 <button
+                  type="button"
                   onClick={() => setIsCameraOpen(true)}
-                  className="flex items-center gap-2.5 px-6 py-3 rounded-full bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-500 text-white font-bold text-xs sm:text-sm shadow-[0_4px_25px_rgba(168,85,247,0.45)] hover:shadow-[0_6px_30px_rgba(168,85,247,0.65)] hover:scale-105 active:scale-95 transition-all duration-300 border border-purple-400/40"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-500 text-white font-bold text-xs sm:text-sm shadow-[0_4px_25px_rgba(168,85,247,0.45)] hover:shadow-[0_6px_30px_rgba(168,85,247,0.65)] hover:scale-105 active:scale-95 transition-all duration-300 border border-purple-400/40 cursor-pointer"
                 >
                   <span className="text-base">📸</span>
                   <span>Detect Mood with Face</span>
@@ -387,139 +437,173 @@ const HomePage = () => {
 
                 {/* 2. 🎛️ Manually Select Mood */}
                 <button
+                  type="button"
                   onClick={() => setIsManualModalOpen(true)}
-                  className="flex items-center gap-2 px-5 py-3 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white font-semibold text-xs sm:text-sm backdrop-blur-xl shadow-lg hover:scale-105 active:scale-95 transition-all duration-300"
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white font-semibold text-xs sm:text-sm backdrop-blur-xl shadow-lg hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer"
                 >
                   <span>🎛️</span>
-                  <span>Manually Select Mood</span>
+                  <span>Select from Grid</span>
+                </button>
+
+                {/* 3. 💬 AI Music Chatbot */}
+                <button
+                  type="button"
+                  onClick={() => setIsChatbotOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-gradient-to-r from-purple-600/30 via-pink-600/30 to-purple-600/30 hover:from-purple-600/50 hover:to-pink-600/50 border border-purple-400/40 text-purple-200 hover:text-white font-semibold text-xs sm:text-sm backdrop-blur-xl shadow-lg hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer"
+                >
+                  <span className="text-base">💬</span>
+                  <span>AI Music Chatbot</span>
                 </button>
               </div>
 
               {/* Supplementary Inputs (Voice & Type) */}
-              <div className="flex items-center gap-2 text-xs text-slate-400 pt-1">
+              <div className="flex items-center gap-2 text-xs text-slate-400">
                 <span className="text-[11px] text-slate-400">Or express via:</span>
                 <button
+                  type="button"
                   onClick={handleVoiceToggle}
-                  className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all flex items-center gap-1.5"
+                  className="px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all flex items-center gap-1 cursor-pointer"
                 >
                   <span>🎙️</span>
                   <span>Voice</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => setIsTypeOpen(true)}
-                  className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all flex items-center gap-1.5"
+                  className="px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all flex items-center gap-1 cursor-pointer"
                 >
                   <span>✍️</span>
                   <span>Type</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsChatbotOpen(true)}
+                  className="px-2.5 py-1 rounded-full bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 hover:text-white transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <span>💬</span>
+                  <span>AI Chatbot</span>
                 </button>
               </div>
             </div>
           </div>
 
-          {/* RIGHT: Floating Detected Emotion Glass Card */}
-          <div className="lg:col-span-5 flex justify-start lg:justify-end">
-            <div className="relative w-full max-w-sm rounded-3xl bg-slate-900/60 backdrop-blur-2xl border border-white/15 p-6 shadow-2xl transition-all duration-500 hover:border-purple-500/40 group overflow-hidden">
-              {/* Ambient Inner Halo */}
+          {/* RIGHT COLUMN: Micro Tactile Emotion Tuner + Adjusted Chatbot Hub */}
+          <div className="lg:col-span-5 xl:col-span-5 flex flex-col items-center lg:items-end justify-end space-y-2 mt-2 lg:mt-0">
+            {/* 1. Micro-Profile Tactile Tuner Dial Card */}
+            <div className="relative w-full max-w-[240px] sm:max-w-[250px] rounded-2xl bg-slate-950/60 backdrop-blur-xl border border-white/12 p-2 sm:p-2.5 shadow-2xl transition-all duration-500 hover:border-purple-500/35 group overflow-hidden flex flex-col items-center">
+              {/* Dynamic Bloom Halo matching active mood */}
               <div
-                className="absolute -top-12 -right-12 w-36 h-36 rounded-full blur-2xl opacity-30 pointer-events-none transition-all duration-700"
+                className="absolute -top-8 -right-8 w-24 h-24 rounded-full blur-2xl opacity-20 pointer-events-none transition-all duration-700"
                 style={{ backgroundColor: mood.color }}
               />
 
-              <div className="relative z-10 space-y-3.5">
-                {/* Header with Source Badge */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-400 tracking-wide uppercase font-mono">
-                    {detectionSource === 'face'
-                      ? 'Detected Emotion'
-                      : detectionSource === 'manual'
-                      ? 'Selected Emotion'
-                      : 'Current Emotion'}
+              {/* Header: Ultra-Compact Minimal Row */}
+              <div className="text-center relative z-10 w-full mb-0">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span
+                    className="text-[8px] font-mono uppercase tracking-widest font-bold px-1.5 py-0.2 rounded-full border transition-all shadow-sm"
+                    style={{
+                      color: mood.color,
+                      backgroundColor: `${mood.color}15`,
+                      borderColor: `${mood.color}35`,
+                    }}
+                  >
+                    Tuner
                   </span>
 
-                  {/* ONLY SHOW CONFIDENCE TO FACE VERIFICATION */}
+                  {/* Verification / Source Status Pill */}
                   {detectionSource === 'face' && faceConfidence ? (
-                    <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1.5 shadow-sm">
-                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
-                      <span>Face Verified</span>
-                    </span>
-                  ) : detectionSource === 'manual' ? (
-                    <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-cyan/15 text-cyan border border-cyan/30 flex items-center gap-1">
-                      <span>🎯 Manual</span>
+                    <span className="text-[7.5px] font-mono px-1 py-0.2 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1 shadow-sm">
+                      <span className="w-1 h-1 rounded-full bg-purple-400 animate-pulse" />
+                      <span>{faceConfidence}</span>
                     </span>
                   ) : (
-                    <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/15">
-                      Ready for Scan
+                    <span className="text-[7.5px] font-mono px-1 py-0.2 rounded-full bg-cyan/10 text-cyan border border-cyan/25 flex items-center gap-0.5">
+                      <span>🎛️ Live Dial</span>
                     </span>
                   )}
                 </div>
 
-                {/* Mood Emoji + Name + Verification Confidence */}
-                <div className="flex items-center gap-3">
-                  <span className="text-4xl sm:text-5xl drop-shadow-md select-none animate-bounce" style={{ animationDuration: '3s' }}>
-                    {mood.emoji}
+                <h3 className="text-xs font-bold text-white tracking-tight">
+                  Dial Atmosphere
+                </h3>
+              </div>
+
+              {/* Interactive Rotary Dial (Micro Scaled) */}
+              <div className="relative z-10 w-full flex justify-center -my-3.5">
+                <RotaryMoodDial
+                  compact={true}
+                  showPills={false}
+                  onSelectMood={handleDialSelectMood}
+                  onCurateStream={handleCurateWithPreferences}
+                  showCurateButton={false}
+                />
+              </div>
+
+              {/* Action Footer */}
+              <div className="w-full relative z-10 pt-1.5 border-t border-white/10 mt-0 space-y-1">
+                <button
+                  type="button"
+                  onClick={() => handleCurateWithPreferences(mood)}
+                  className="w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg font-bold text-[10px] text-obsidian-950 shadow-md transition-all hover:scale-102 active:scale-98 cursor-pointer"
+                  style={{
+                    background: `linear-gradient(135deg, ${mood.color} 0%, #ffffff 100%)`,
+                    boxShadow: `0 3px 12px -3px ${mood.color}66`,
+                  }}
+                >
+                  <span>🚀 Curate Stream</span>
+                  <span>→</span>
+                </button>
+
+                <div className="flex items-center justify-between text-[8.5px] text-slate-400 font-mono px-0.5">
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: mood.color }} />
+                    <strong className="text-white uppercase">{mood.name}</strong>
                   </span>
-                  <div>
-                    <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                      {mood.name}
-                    </h2>
-
-                    {/* STRICT RULE: Only show confidence percentage to face verification */}
-                    {detectionSource === 'face' && faceConfidence ? (
-                      <p className="text-xs text-purple-300 font-mono font-bold tracking-wide mt-0.5">
-                        {faceConfidence}
-                      </p>
-                    ) : detectionSource === 'manual' ? (
-                      <p className="text-xs text-slate-400 font-mono mt-0.5">
-                        Manually Chosen
-                      </p>
-                    ) : (
-                      <p className="text-xs text-slate-400 font-mono mt-0.5">
-                        Default Playlist
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  {mood.description}
-                </p>
-
-                {/* Glowing Audio Waveform Line (Amber / Golden Wave) */}
-                <div className="pt-1">
-                  <svg className="w-full h-8 overflow-visible" viewBox="0 0 240 40">
-                    <defs>
-                      <linearGradient id="amberWaveGlow" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.3" />
-                        <stop offset="35%" stopColor="#F59E0B" stopOpacity="1" />
-                        <stop offset="70%" stopColor="#EC4899" stopOpacity="0.9" />
-                        <stop offset="100%" stopColor="#A855F7" stopOpacity="0.4" />
-                      </linearGradient>
-                    </defs>
-                    <path
-                      d="M 0,20 Q 20,20 35,20 T 65,20 T 85,7 T 105,33 T 125,12 T 145,28 T 165,16 T 185,24 T 205,20 T 240,20"
-                      fill="none"
-                      stroke="url(#amberWaveGlow)"
-                      strokeWidth="3.5"
-                      strokeLinecap="round"
-                      style={{
-                        filter: 'drop-shadow(0px 0px 8px rgba(245, 158, 11, 0.7))',
-                      }}
-                    />
-                  </svg>
-                </div>
-
-                {/* Status Footer */}
-                <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400 font-mono">
-                  <span>Recommendation Engine:</span>
                   <button
+                    type="button"
                     onClick={() => navigate('/recommendations')}
-                    className="text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1 hover:underline"
+                    className="hover:underline flex items-center font-semibold transition-colors cursor-pointer"
+                    style={{ color: mood.color }}
                   >
-                    <span>Open Full Stream</span>
-                    <span>→</span>
+                    <span>Stream →</span>
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* 2. Embedded AI Chatbot Assistant Hub Card (Adjusted right below the dial) */}
+            <div className="relative w-full max-w-[240px] sm:max-w-[250px] rounded-xl bg-slate-950/65 backdrop-blur-xl border border-purple-500/30 p-2 shadow-xl transition-all duration-300 hover:border-purple-500/50">
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-[9.5px] font-bold text-white font-mono uppercase tracking-wider">
+                    💬 AI Music Chatbot
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsChatbotOpen(true)}
+                  className="text-[8.5px] text-purple-300 hover:text-white px-1.5 py-0.5 rounded bg-purple-500/20 border border-purple-500/35 transition-all hover:bg-purple-500/40 cursor-pointer font-medium"
+                >
+                  Chat ↗
+                </button>
+              </div>
+
+              <p className="text-[8.5px] text-slate-400 truncate mb-1.5">
+                Play songs, request artists, or get vibe picks
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setIsChatbotOpen(true)}
+                className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-[9.5px] transition-all cursor-pointer group"
+              >
+                <span className="truncate text-slate-400 group-hover:text-slate-200">
+                  Ask: "Play romantic songs" or voice...
+                </span>
+                <span className="text-purple-400 text-xs ml-1">🎙️</span>
+              </button>
             </div>
           </div>
         </div>
@@ -793,6 +877,25 @@ const HomePage = () => {
           </div>
         </div>
       )}
+
+      {/* ============================================================== */}
+      {/* FLOATING AI CHATBOT ASSISTANT ON HOME PAGE                     */}
+      {/* ============================================================== */}
+      <Chatbot
+        isOpen={isChatbotOpen}
+        onToggle={() => setIsChatbotOpen(!isChatbotOpen)}
+        currentMood={activeMoodKey}
+        onPlaySong={(song) => {
+          dispatch(setQueue([song]));
+          dispatch(playSong(song));
+        }}
+        onPlayPlaylist={(playlist) => {
+          if (playlist?.songs?.length > 0) {
+            dispatch(setQueue(playlist.songs));
+            dispatch(playSong(playlist.songs[0]));
+          }
+        }}
+      />
     </div>
   );
 };

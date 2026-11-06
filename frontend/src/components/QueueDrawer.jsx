@@ -5,6 +5,7 @@ import {
   removeFromQueue,
   clearQueue,
 } from '../store/audioSlice';
+import { resolveMusicTheme } from '../utils/themeMap';
 
 const formatDuration = (seconds) => {
   if (!seconds || isNaN(seconds)) return '3:45';
@@ -19,9 +20,10 @@ const QueueDrawer = () => {
     (state) => state.audio
   );
 
-  if (!isQueueOpen) return null;
-
   const currentSong = queue[currentIndex] || null;
+  const theme = resolveMusicTheme(currentSong, activeMood);
+
+  if (!isQueueOpen) return null;
 
   return (
     <>
@@ -40,11 +42,21 @@ const QueueDrawer = () => {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-obsidian-800/60 bg-obsidian-950/40">
           <div className="flex items-center gap-2.5">
-            <div className="w-2 h-2 rounded-full bg-cyan animate-pulse" />
+            <div
+              className="w-2 h-2 rounded-full animate-pulse"
+              style={{ backgroundColor: theme.accent, boxShadow: `0 0 8px ${theme.glow}` }}
+            />
             <h2 className="text-base font-semibold text-white tracking-wide">
               Queue
             </h2>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-obsidian-800 text-slate-400 font-mono">
+            <span
+              className="text-xs px-2 py-0.5 rounded-full font-mono border"
+              style={{
+                color: theme.accent,
+                borderColor: `${theme.accent}40`,
+                backgroundColor: `${theme.accent}15`,
+              }}
+            >
               {queue.length}
             </span>
           </div>
@@ -76,11 +88,23 @@ const QueueDrawer = () => {
           {/* Section 1: Now Playing */}
           {currentSong ? (
             <div>
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald" />
-                Now Playing
+              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: theme.accent }} />
+                  Now Playing
+                </span>
+                <span className="text-[10px] font-mono capitalize" style={{ color: theme.accent }}>
+                  {theme.name}
+                </span>
               </div>
-              <div className="relative group flex items-center gap-3 p-3 rounded-xl bg-cyan/5 border border-cyan/30 shadow-lg shadow-cyan/5">
+              <div
+                className="relative group flex items-center gap-3 p-3 rounded-xl border shadow-lg"
+                style={{
+                  backgroundColor: `${theme.accent}15`,
+                  borderColor: `${theme.accent}50`,
+                  boxShadow: `0 0 15px ${theme.glow}`,
+                }}
+              >
                 <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-obsidian-800">
                   <img
                     src={currentSong.image || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=120&auto=format&fit=crop&q=80'}
@@ -92,28 +116,35 @@ const QueueDrawer = () => {
                   />
                   {isPlaying && (
                     <div className="absolute inset-0 bg-obsidian-950/60 flex items-center justify-center gap-0.5">
-                      <span className="w-1 h-3.5 bg-cyan rounded-full animate-bounce [animation-delay:-0.3s]" />
-                      <span className="w-1 h-4 bg-cyan rounded-full animate-bounce [animation-delay:-0.15s]" />
-                      <span className="w-1 h-2.5 bg-cyan rounded-full animate-bounce" />
+                      <span className="w-1 h-3.5 rounded-full animate-bounce [animation-delay:-0.3s]" style={{ backgroundColor: theme.accent }} />
+                      <span className="w-1 h-4 rounded-full animate-bounce [animation-delay:-0.15s]" style={{ backgroundColor: theme.accent }} />
+                      <span className="w-1 h-2.5 rounded-full animate-bounce" style={{ backgroundColor: theme.accent }} />
                     </div>
                   )}
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white truncate group-hover:text-cyan transition-colors">
+                  <p className="text-sm font-semibold text-white truncate group-hover:opacity-90 transition-opacity">
                     {currentSong.name}
                   </p>
                   <p className="text-xs text-slate-400 truncate">
                     {currentSong.artist}
                   </p>
                   {currentSong.mood_match && (
-                    <span className="inline-block mt-1 text-[10px] font-medium text-cyan/90 bg-cyan/10 px-1.5 py-0.5 rounded border border-cyan/20">
+                    <span
+                      className="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded border"
+                      style={{
+                        color: theme.accent,
+                        backgroundColor: `${theme.accent}20`,
+                        borderColor: `${theme.accent}40`,
+                      }}
+                    >
                       {currentSong.mood_match}
                     </span>
                   )}
                 </div>
 
-                <span className="text-xs font-mono text-cyan flex-shrink-0">
+                <span className="text-xs font-mono flex-shrink-0" style={{ color: theme.accent }}>
                   {formatDuration(currentSong.duration)}
                 </span>
               </div>

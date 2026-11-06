@@ -11,7 +11,11 @@ import {
   cycleRepeatMode,
   toggleQueue,
   toggleTurntable,
+  closePlayer,
+  reopenPlayer,
+  clearCurrentSong,
 } from '../store/audioSlice';
+import { resolveMusicTheme } from '../utils/themeMap';
 
 // Helper to format seconds into mm:ss
 const formatTime = (seconds) => {
@@ -110,13 +114,15 @@ const BottomPlayer = () => {
     repeatMode,
     isQueueOpen,
     activeMood,
+    isPlayerDismissed,
   } = useSelector((state) => state.audio);
 
   const [isLiked, setIsLiked] = useState(false);
   const [hoverTime, setHoverTime] = useState(null);
   const [hoverX, setHoverX] = useState(0);
 
-  const moodStyle = MOOD_COLOR_MAP[activeMood?.toLowerCase()] || MOOD_COLOR_MAP.calm;
+  // Strictly adapt player colors to the playing track's mood and genre!
+  const moodStyle = resolveMusicTheme(currentSong, activeMood);
 
   const progressPercent = useMemo(() => {
     if (!duration || duration <= 0) return 0;
@@ -150,6 +156,35 @@ const BottomPlayer = () => {
   };
 
   if (!currentSong) return null;
+
+  // If user requested to remove player from screen, provide subtle restore pill with permanent dismiss
+  if (isPlayerDismissed) {
+    return (
+      <div className="fixed bottom-4 right-4 z-40 animate-fadeIn flex items-center gap-2">
+        <button
+          onClick={() => dispatch(reopenPlayer())}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-slate-900/95 hover:bg-slate-800 text-white text-xs font-semibold shadow-2xl border border-white/20 hover:border-cyan/50 backdrop-blur-xl transition-all hover:scale-105 active:scale-95 cursor-pointer group"
+          title="Restore music player dock"
+        >
+          <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: moodStyle.accent }} />
+          <span>🎵 Show Player</span>
+          <span className="text-[10px] text-slate-400 font-normal truncate max-w-[130px]">
+            ({currentSong.name})
+          </span>
+        </button>
+
+        <button
+          onClick={() => dispatch(clearCurrentSong())}
+          className="p-2 rounded-full bg-slate-900/90 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-white/15 transition-all shadow-lg cursor-pointer"
+          title="Dismiss permanently"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <footer
@@ -452,11 +487,23 @@ const BottomPlayer = () => {
           <button
             onClick={() => dispatch(toggleTurntable())}
             aria-label="Maximize vinyl turntable"
-            className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+            className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all cursor-pointer"
             title="Maximize to Vinyl Turntable Player"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          </button>
+
+          {/* Close & Remove Player from Screen Button [ ✕ ] */}
+          <button
+            onClick={() => dispatch(closePlayer())}
+            aria-label="Remove player from screen"
+            className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 rounded-xl transition-all cursor-pointer flex-shrink-0"
+            title="Remove player from screen (Stop & Close)"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>

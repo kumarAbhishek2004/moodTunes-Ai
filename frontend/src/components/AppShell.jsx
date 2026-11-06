@@ -1,6 +1,7 @@
 import { useSelector, useDispatch } from 'react-redux';
 import { useLocation } from 'react-router-dom';
 import { toggleTurntable } from '../store/audioSlice';
+import { resolveMusicTheme } from '../utils/themeMap';
 import PersistentAudioEngine from './PersistentAudioEngine';
 import HorizontalNavbar from './HorizontalNavbar';
 import BottomPlayer from './BottomPlayer';
@@ -67,9 +68,12 @@ export const MOOD_GLOW_MAP = {
 const AppShell = ({ children }) => {
   const dispatch = useDispatch();
   const location = useLocation();
-  const activeMood = useSelector((state) => state.audio.activeMood) || 'calm';
+  const currentSong = useSelector((state) => state.audio.currentSong);
+  const activeMood = useSelector((state) => state.audio.activeMood) || 'happy';
   const isTurntableOpen = useSelector((state) => state.audio.isTurntableOpen);
-  const glow = MOOD_GLOW_MAP[activeMood.toLowerCase()] || MOOD_GLOW_MAP.calm;
+  
+  // Strict guideline: When music is playing, colors dynamically adapt to song's mood and genre!
+  const glow = resolveMusicTheme(currentSong, activeMood);
 
   const isAuthRoute = location.pathname === '/login';
 
@@ -79,6 +83,7 @@ const AppShell = ({ children }) => {
       style={{
         backgroundColor: '#060B10',
         ['--mood-accent']: glow.accent,
+        ['--mood-accent-rgb']: glow.accentRgb,
       }}
     >
       {/* 1. Root Persistent Audio Engine (Uninterrupted across client-side routes) */}

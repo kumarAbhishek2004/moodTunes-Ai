@@ -5,6 +5,7 @@ import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 import { playSong } from '../store/audioSlice';
 import { logout } from '../store/authSlice';
+import { resolveMusicTheme } from '../utils/themeMap';
 
 const HorizontalNavbar = () => {
   const location = useLocation();
@@ -12,7 +13,11 @@ const HorizontalNavbar = () => {
   const dispatch = useDispatch();
 
   const { user, isAuthenticated } = useSelector((state) => state.auth);
+  const currentSong = useSelector((state) => state.audio.currentSong);
   const activeMood = useSelector((state) => state.audio.activeMood) || 'happy';
+
+  // Strict guideline: dynamically adapt all navbar accents to playing track's genre & mood
+  const theme = resolveMusicTheme(currentSong, activeMood);
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -108,15 +113,32 @@ const HorizontalNavbar = () => {
         {/* LEFT: Equalizer Icon + MoodTunes AI Brand                 */}
         {/* ========================================================= */}
         <NavLink to="/" className="flex items-center gap-3 group select-none">
-          {/* Equalizer Bars Icon */}
+          {/* Dynamic Equalizer Bars Icon */}
           <div className="flex items-end gap-1 h-6 px-1 py-0.5">
-            <span className="w-1.5 h-3.5 bg-gradient-to-t from-purple-500 to-indigo-400 rounded-full animate-pulse" />
-            <span className="w-1.5 h-6 bg-gradient-to-t from-purple-600 to-pink-500 rounded-full" />
-            <span className="w-1.5 h-4.5 bg-gradient-to-t from-indigo-500 to-cyan rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
-            <span className="w-1.5 h-3 bg-gradient-to-t from-purple-500 to-indigo-400 rounded-full" />
+            <span
+              className="w-1.5 h-3.5 rounded-full animate-pulse transition-colors duration-500"
+              style={{ backgroundColor: theme.accent, opacity: 0.8 }}
+            />
+            <span
+              className="w-1.5 h-6 rounded-full transition-colors duration-500"
+              style={{ backgroundColor: theme.accent, boxShadow: `0 0 8px ${theme.glow}` }}
+            />
+            <span
+              className="w-1.5 h-4.5 rounded-full animate-pulse transition-colors duration-500"
+              style={{ backgroundColor: theme.accent, animationDelay: '150ms', opacity: 0.9 }}
+            />
+            <span
+              className="w-1.5 h-3 rounded-full transition-colors duration-500"
+              style={{ backgroundColor: theme.accent, opacity: 0.7 }}
+            />
           </div>
 
-          <span className="text-lg sm:text-xl font-extrabold text-white tracking-tight group-hover:text-purple-300 transition-colors">
+          <span
+            className="text-lg sm:text-xl font-extrabold text-white tracking-tight group-hover:opacity-90 transition-all"
+            style={{
+              textShadow: `0 0 20px ${theme.glow}`,
+            }}
+          >
             MoodTunes AI
           </span>
         </NavLink>
@@ -133,9 +155,17 @@ const HorizontalNavbar = () => {
                 to={item.path}
                 className={`relative px-4 sm:px-5 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-300 ${
                   isActive
-                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/40 scale-105'
+                    ? 'text-white shadow-lg scale-105'
                     : 'text-slate-300 hover:text-white hover:bg-white/10'
                 }`}
+                style={
+                  isActive
+                    ? {
+                        backgroundColor: theme.accent,
+                        boxShadow: `0 4px 18px ${theme.glow}`,
+                      }
+                    : undefined
+                }
               >
                 {item.name}
               </NavLink>
@@ -153,7 +183,7 @@ const HorizontalNavbar = () => {
             className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-slate-300 hover:text-white transition-all"
             title="Search songs (Ctrl+K)"
           >
-            <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5" style={{ color: theme.accent }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <span className="hidden md:inline">Search</span>
@@ -166,7 +196,11 @@ const HorizontalNavbar = () => {
           <div className="relative" ref={profileRef}>
             <button
               onClick={() => setIsProfileOpen((prev) => !prev)}
-              className="relative rounded-full p-0.5 border-2 border-purple-500/60 hover:border-purple-400 shadow-md hover:scale-105 transition-all focus:outline-none"
+              className="relative rounded-full p-0.5 border-2 shadow-md hover:scale-105 transition-all focus:outline-none"
+              style={{
+                borderColor: `${theme.accent}99`,
+                boxShadow: `0 0 12px ${theme.glow}`,
+              }}
               title={`Logged in as ${displayName}`}
             >
               <img
@@ -251,7 +285,7 @@ const HorizontalNavbar = () => {
             className="w-full max-w-xl rounded-2xl bg-obsidian-900 border border-white/15 shadow-2xl overflow-hidden"
           >
             <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10 bg-obsidian-950/80">
-              <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" style={{ color: theme.accent }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input
@@ -273,7 +307,10 @@ const HorizontalNavbar = () => {
             <div className="max-h-72 overflow-y-auto p-2">
               {isSearching ? (
                 <div className="py-6 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                  <span
+                    className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
+                    style={{ borderColor: theme.accent, borderTopColor: 'transparent' }}
+                  />
                   Searching YouTube & catalog...
                 </div>
               ) : searchResults.length > 0 ? (
@@ -285,17 +322,27 @@ const HorizontalNavbar = () => {
                       className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-white/10 transition-colors text-left group"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded-lg bg-obsidian-800 flex items-center justify-center text-xs font-bold text-purple-400 group-hover:scale-105 transition-transform flex-shrink-0">
+                        <div
+                          className="w-9 h-9 rounded-lg bg-obsidian-800 flex items-center justify-center text-xs font-bold group-hover:scale-105 transition-transform flex-shrink-0"
+                          style={{ color: theme.accent }}
+                        >
                           ▶
                         </div>
                         <div className="truncate">
-                          <p className="text-xs font-bold text-white group-hover:text-purple-300 truncate">
+                          <p className="text-xs font-bold text-white group-hover:text-cyan transition-colors truncate">
                             {song.name}
                           </p>
                           <p className="text-[11px] text-slate-400 truncate">{song.artist}</p>
                         </div>
                       </div>
-                      <span className="text-[10px] text-purple-400 font-mono px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">
+                      <span
+                        className="text-[10px] font-mono px-2 py-0.5 rounded border"
+                        style={{
+                          color: theme.accent,
+                          borderColor: `${theme.accent}40`,
+                          backgroundColor: `${theme.accent}15`,
+                        }}
+                      >
                         Play Now
                       </span>
                     </button>

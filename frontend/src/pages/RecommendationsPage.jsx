@@ -6,11 +6,13 @@ import { API_BASE_URL } from '../config/api';
 import { playSong, setQueue, setActiveMood } from '../store/audioSlice';
 import DenseTracklist from '../components/DenseTracklist';
 import Chatbot from '../components/Chatbot';
+import { resolveMusicTheme } from '../utils/themeMap';
 
 const RecommendationsPage = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
+  const currentSong = useSelector((state) => state.audio.currentSong);
   const activeReduxMood = useSelector((state) => state.audio.activeMood);
   const [mood, setMood] = useState(null);
   const [preferences, setPreferences] = useState(null);
@@ -18,6 +20,9 @@ const RecommendationsPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+
+  // Strict guideline: adapt all colors according to song's mood and genre
+  const theme = resolveMusicTheme(currentSong, mood?.mood || activeReduxMood || 'calm');
 
   useEffect(() => {
     try {
@@ -119,7 +124,12 @@ const RecommendationsPage = () => {
 
           <button
             onClick={() => navigate('/mood-detection')}
-            className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-xl bg-cyan/15 hover:bg-cyan/25 text-cyan border border-cyan/30 transition-colors"
+            className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-xl transition-all border shadow-sm"
+            style={{
+              backgroundColor: `${theme.accent}18`,
+              borderColor: `${theme.accent}40`,
+              color: theme.accent,
+            }}
           >
             <span>🎛️</span>
             <span>Change Mood</span>
@@ -128,13 +138,29 @@ const RecommendationsPage = () => {
       </div>
 
       {/* Stream Overview Banner */}
-      <div className="relative rounded-3xl bg-obsidian-900/80 backdrop-blur-2xl border border-obsidian-800/90 p-6 sm:p-8 shadow-2xl mb-8 overflow-hidden">
-        <div className="absolute top-0 right-0 w-80 h-32 bg-cyan/10 blur-3xl pointer-events-none" />
+      <div
+        className="relative rounded-3xl bg-obsidian-900/80 backdrop-blur-2xl border p-6 sm:p-8 shadow-2xl mb-8 overflow-hidden transition-all duration-700"
+        style={{
+          borderColor: `${theme.accent}30`,
+          boxShadow: `0 20px 60px -15px ${theme.glow}`,
+        }}
+      >
+        <div
+          className="absolute top-0 right-0 w-80 h-32 blur-3xl pointer-events-none transition-all duration-700"
+          style={{ backgroundColor: `${theme.accent}20` }}
+        />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-3">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan/10 border border-cyan/30 text-cyan text-xs font-mono font-bold">
+              <div
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-bold border"
+                style={{
+                  backgroundColor: `${theme.accent}15`,
+                  borderColor: `${theme.accent}35`,
+                  color: theme.accent,
+                }}
+              >
                 <span>● LIVE AI STREAM</span>
               </div>
               {mood?.source === 'face' && mood?.confidence ? (
@@ -144,13 +170,20 @@ const RecommendationsPage = () => {
                   <span>{Math.round(mood.confidence)}% Confidence</span>
                 </div>
               ) : mood?.source === 'manual' ? (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan/15 border border-cyan/30 text-cyan text-xs font-mono font-bold">
+                <div
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold border"
+                  style={{
+                    backgroundColor: `${theme.accent}15`,
+                    borderColor: `${theme.accent}30`,
+                    color: theme.accent,
+                  }}
+                >
                   <span>🎯 Manually Selected Mood</span>
                 </div>
               ) : null}
             </div>
             <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
-              Tuned for Your <span className="text-cyan capitalize">{mood?.mood || activeReduxMood || 'Current'}</span> Vibe
+              Tuned for Your <span className="capitalize" style={{ color: theme.accent }}>{mood?.mood || activeReduxMood || 'Current'}</span> Vibe
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-2xl leading-relaxed">
               Curated using multi-class emotional quota balancing, artist similarity matching, and transparent Explainable AI badges.

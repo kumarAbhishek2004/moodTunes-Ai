@@ -1,4 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit';
+import { resolveKnownYouTubeId } from '../utils/songMap';
 
 // Retrieve cached state if available
 const cachedQueue = localStorage.getItem('recommendations')
@@ -27,6 +28,7 @@ const initialState = {
   isQueueOpen: false,
   isShuffle: false,
   repeatMode: 'off', // 'off' | 'all' | 'one'
+  isPlayerDismissed: false, // Allows removing the player dock from the screen
 };
 
 export const audioSlice = createSlice({
@@ -34,25 +36,39 @@ export const audioSlice = createSlice({
   initialState,
   reducers: {
     playSong: (state, action) => {
-      const song = action.payload;
+      let song = { ...action.payload };
       if (!song) return;
+
+      // Ensure song has its accurate YouTube ID; reject wrongly assigned Raataan Lambiyan ID for other songs
+      const isRaataan = String(song.name || '').toLowerCase().includes('raataan');
+      if (!song.youtube_id || (song.youtube_id === 'gvyUuxdRdR4' && !isRaataan)) {
+        const knownId = resolveKnownYouTubeId(song.name, song.artist);
+        if (knownId) {
+          song.youtube_id = knownId;
+        } else if (song.youtube_id === 'gvyUuxdRdR4' && !isRaataan) {
+          song.youtube_id = null; // Clear incorrect fallback
+        }
+      }
+
       state.currentSong = song;
       state.isPlaying = true;
       state.currentTime = 0;
       state.isTurntableOpen = true; // Open on music player section when music is played!
       state.isVideoMode = false;
+      state.isPlayerDismissed = false;
       
       // Update mood if song carries a match
       if (song.mood_match) {
         state.activeMood = song.mood_match.toLowerCase();
       }
 
-      // Add to queue if not present
+      // Add to queue if not present or update existing
       const index = state.queue.findIndex((s) => s.id === song.id || (s.name === song.name && s.artist === song.artist));
       if (index === -1) {
         state.queue.unshift(song);
         state.currentIndex = 0;
       } else {
+        state.queue[index] = song;
         state.currentIndex = index;
       }
 
@@ -61,6 +77,26 @@ export const audioSlice = createSlice({
         localStorage.setItem('recommendations', JSON.stringify(state.queue));
       } catch (e) {
         // storage overflow guard
+      }
+    },
+
+    updateSongYouTubeId: (state, action) => {
+      const { id, name, artist, youtube_id } = action.payload || {};
+      if (!youtube_id) return;
+
+      if (state.currentSong && (state.currentSong.id === id || (state.currentSong.name === name && state.currentSong.artist === artist))) {
+        state.currentSong = { ...state.currentSong, youtube_id };
+        try {
+          localStorage.setItem('currentSong', JSON.stringify(state.currentSong));
+        } catch (e) {}
+      }
+
+      const qIdx = state.queue.findIndex((s) => s.id === id || (s.name === name && s.artist === artist));
+      if (qIdx !== -1) {
+        state.queue[qIdx] = { ...state.queue[qIdx], youtube_id };
+        try {
+          localStorage.setItem('recommendations', JSON.stringify(state.queue));
+        } catch (e) {}
       }
     },
 
@@ -209,9 +245,24 @@ export const audioSlice = createSlice({
       const index = action.payload;
       if (index >= 0 && index < state.queue.length) {
         state.currentIndex = index;
-        state.currentSong = state.queue[index];
+        let song = { ...state.queue[index] };
+
+        // Ensure correct YouTube ID for indexed track
+        const isRaataan = String(song.name || '').toLowerCase().includes('raataan');
+        if (!song.youtube_id || (song.youtube_id === 'gvyUuxdRdR4' && !isRaataan)) {
+          const knownId = resolveKnownYouTubeId(song.name, song.artist);
+          if (knownId) {
+            song.youtube_id = knownId;
+          } else if (song.youtube_id === 'gvyUuxdRdR4' && !isRaataan) {
+            song.youtube_id = null;
+          }
+        }
+
+        state.queue[index] = song;
+        state.currentSong = song;
         state.currentTime = 0;
         state.isPlaying = true;
+        state.isPlayerDismissed = false;
         if (state.currentSong?.mood_match) {
           state.activeMood = state.currentSong.mood_match.toLowerCase();
         }
@@ -254,11 +305,35 @@ export const audioSlice = createSlice({
     toggleVideoMode: (state) => {
       state.isVideoMode = !state.isVideoMode;
     },
+
+    // Dismiss & remove player from screen
+    closePlayer: (state) => {
+      state.isPlaying = false;
+      state.isTurntableOpen = false;
+      state.isPlayerDismissed = true;
+    },
+
+    // Restore player dock to screen
+    reopenPlayer: (state) => {
+      state.isPlayerDismissed = false;
+    },
+
+    // Permanently remove song & player from screen
+    clearCurrentSong: (state) => {
+      state.isPlaying = false;
+      state.isTurntableOpen = false;
+      state.currentSong = null;
+      state.isPlayerDismissed = true;
+      try {
+        localStorage.removeItem('currentSong');
+      } catch (e) {}
+    },
   },
 });
 
 export const {
   playSong,
+  updateSongYouTubeId,
   setQueue,
   addToQueue,
   togglePlayPause,
@@ -281,6 +356,9 @@ export const {
   playSongAtIndex,
   removeFromQueue,
   clearQueue,
+  closePlayer,
+  reopenPlayer,
+  clearCurrentSong,
 } = audioSlice.actions;
 
 export default audioSlice.reducer;

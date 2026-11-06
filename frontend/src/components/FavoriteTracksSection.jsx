@@ -3,6 +3,8 @@ import { useSelector, useDispatch } from 'react-redux';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 import { playSong, setQueue } from '../store/audioSlice';
+import { resolveMusicTheme } from '../utils/themeMap';
+import { resolveKnownYouTubeId } from '../utils/songMap';
 
 const DEFAULT_FAVORITES = [
   {
@@ -41,14 +43,19 @@ const FavoriteTracksSection = () => {
   const isPlaying = useSelector((state) => state.audio.isPlaying);
   const activeMood = useSelector((state) => state.audio.activeMood) || 'happy';
 
+  // Strict guideline: colors adapt to song's mood and genre
+  const theme = resolveMusicTheme(currentSong, activeMood);
+
   const [favorites, setFavorites] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null); // null = adding, number = editing
 
-  // Search state inside Modal
-  const [searchQuery, setSearchQuery] = useState('');
+  // Dual search state: Song Title + Singer / Artist
+  const [searchTitle, setSearchTitle] = useState('');
+  const [searchArtist, setSearchArtist] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [savingTrackId, setSavingTrackId] = useState(null);
 
   // Manual input state
   const [manualTitle, setManualTitle] = useState('');
@@ -58,6 +65,18 @@ const FavoriteTracksSection = () => {
 
   // Status feedback
   const [syncStatus, setSyncStatus] = useState('');
+
+  // Lock body scroll when modal is open to completely prevent whole website scrolling/reloading
+  useEffect(() => {
+    if (isModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isModalOpen]);
 
   // 1. Load favorites on mount / auth change
   useEffect(() => {
@@ -132,8 +151,16 @@ const FavoriteTracksSection = () => {
 
   // 3. Play a favorite track
   const handlePlayFavorite = (song) => {
+    let playTarget = { ...song };
+    const isRaataan = String(playTarget.name || '').toLowerCase().includes('raataan');
+    if (!playTarget.youtube_id || (playTarget.youtube_id === 'gvyUuxdRdR4' && !isRaataan)) {
+      const knownYt = resolveKnownYouTubeId(playTarget.name, playTarget.artist);
+      if (knownYt) {
+        playTarget.youtube_id = knownYt;
+      }
+    }
     dispatch(setQueue(favorites));
-    dispatch(playSong(song));
+    dispatch(playSong(playTarget));
   };
 
   // 4. Remove a favorite track
@@ -143,18 +170,41 @@ const FavoriteTracksSection = () => {
     persistFavorites(nextList);
   };
 
-  // 5. Search Spotify/Apple Music for track metadata & artwork
-  const handleSearch = async (query) => {
-    setSearchQuery(query);
-    if (!query || query.trim().length < 2) {
+  // 5. Debounced Dual Search for Song Title + Singer / Artist
+  useEffect(() => {
+    const t = searchTitle.trim();
+    const a = searchArtist.trim();
+    if (!t && !a) {
       setSearchResults([]);
+      setIsSearching(false);
       return;
     }
 
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await axios.get(`${API_BASE_URL}/api/search-tracks`, {
+          params: { title: t, artist: a, limit: 8 },
+        });
+        setSearchResults(res.data?.tracks || []);
+      } catch (e) {
+        console.warn('Search failed:', e);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [searchTitle, searchArtist]);
+
+  const handleManualSearchTrigger = async () => {
+    const t = searchTitle.trim();
+    const a = searchArtist.trim();
+    if (!t && !a) return;
     setIsSearching(true);
     try {
       const res = await axios.get(`${API_BASE_URL}/api/search-tracks`, {
-        params: { q: query, limit: 6 },
+        params: { title: t, artist: a, limit: 8 },
       });
       setSearchResults(res.data?.tracks || []);
     } catch (e) {
@@ -164,15 +214,17 @@ const FavoriteTracksSection = () => {
     }
   };
 
-  // 6. Select a searched track to add/replace
+  // 6. Select a searched track and save to favorites with visual feedback
   const handleSelectSearchedTrack = (track) => {
+    setSavingTrackId(track.id);
+    const knownYt = resolveKnownYouTubeId(track.name, track.artist);
     const newTrack = {
       id: track.id || `custom-${Date.now()}`,
       name: track.name,
       artist: track.artist,
       image: track.image,
       duration: track.duration || 210,
-      youtube_id: track.youtube_id || null,
+      youtube_id: track.youtube_id || knownYt || null,
       mood_match: 'Favorite',
     };
 
@@ -184,7 +236,10 @@ const FavoriteTracksSection = () => {
     }
 
     persistFavorites(nextList);
-    closeModal();
+    setTimeout(() => {
+      setSavingTrackId(null);
+      closeModal();
+    }, 450);
   };
 
   // 7. Manually fetch artwork for manual inputs
@@ -209,6 +264,7 @@ const FavoriteTracksSection = () => {
   const handleSaveManualTrack = () => {
     if (!manualTitle.trim()) return;
 
+    const knownYt = resolveKnownYouTubeId(manualTitle, manualArtist);
     const newTrack = {
       id: `manual-${Date.now()}`,
       name: manualTitle.trim(),
@@ -217,6 +273,7 @@ const FavoriteTracksSection = () => {
         manualImage.trim() ||
         'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80',
       duration: 210,
+      youtube_id: knownYt || null,
       mood_match: 'Favorite',
     };
 
@@ -233,28 +290,33 @@ const FavoriteTracksSection = () => {
 
   const openAddModal = () => {
     setEditingIndex(null);
-    setSearchQuery('');
+    setSearchTitle('');
+    setSearchArtist('');
     setSearchResults([]);
     setManualTitle('');
     setManualArtist('');
     setManualImage('');
+    setSavingTrackId(null);
     setIsModalOpen(true);
   };
 
   const openEditModal = (idx, song, e) => {
     e.stopPropagation();
     setEditingIndex(idx);
-    setSearchQuery('');
+    setSearchTitle(song.name);
+    setSearchArtist(song.artist);
     setSearchResults([]);
     setManualTitle(song.name);
     setManualArtist(song.artist);
     setManualImage(song.image || '');
+    setSavingTrackId(null);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingIndex(null);
+    setSavingTrackId(null);
   };
 
   return (
@@ -293,7 +355,11 @@ const FavoriteTracksSection = () => {
           {favorites.length < 5 && (
             <button
               onClick={openAddModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md hover:scale-105 active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-xs font-bold shadow-md hover:scale-105 active:scale-95 transition-all"
+              style={{
+                backgroundColor: theme.accent,
+                boxShadow: `0 4px 15px ${theme.glow}`,
+              }}
             >
               <span>+</span>
               <span>Add Track</span>
@@ -317,9 +383,17 @@ const FavoriteTracksSection = () => {
               onClick={() => handlePlayFavorite(song)}
               className={`group relative flex flex-col justify-between p-3 rounded-2xl bg-slate-900/60 hover:bg-slate-900/80 border transition-all duration-300 cursor-pointer overflow-hidden backdrop-blur-xl shadow-lg hover:shadow-2xl ${
                 isSongPlaying
-                  ? 'border-purple-500/80 shadow-[0_0_20px_rgba(168,85,247,0.3)]'
-                  : 'border-white/10 hover:border-purple-500/40'
+                  ? 'shadow-lg'
+                  : 'border-white/10'
               }`}
+              style={
+                isSongPlaying
+                  ? {
+                      borderColor: theme.accent,
+                      boxShadow: `0 0 25px ${theme.glow}`,
+                    }
+                  : undefined
+              }
             >
               {/* Slot Badge & Controls Overlay */}
               <div className="flex items-center justify-between mb-2.5">
@@ -367,7 +441,13 @@ const FavoriteTracksSection = () => {
                 <div className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity ${
                   isSongPlaying ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                 }`}>
-                  <div className="w-10 h-10 rounded-full bg-purple-500 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                  <div
+                    className="w-10 h-10 rounded-full text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform"
+                    style={{
+                      backgroundColor: theme.accent,
+                      boxShadow: `0 0 15px ${theme.glow}`,
+                    }}
+                  >
                     {isSongPlaying ? (
                       <div className="flex items-end gap-0.5 h-3.5">
                         <span className="w-1 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
@@ -385,7 +465,10 @@ const FavoriteTracksSection = () => {
 
               {/* Title & Artist */}
               <div className="min-w-0">
-                <h4 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-purple-300 transition-colors">
+                <h4
+                  className="text-xs sm:text-sm font-bold text-white truncate transition-colors"
+                  style={{ color: isSongPlaying ? theme.accent : undefined }}
+                >
                   {song.name}
                 </h4>
                 <p className="text-[11px] text-slate-400 truncate mt-0.5">
@@ -414,10 +497,18 @@ const FavoriteTracksSection = () => {
 
       {/* Add / Customize Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-2xl flex items-center justify-center p-4 animate-fadeIn">
-          <div className="relative w-full max-w-lg rounded-3xl bg-obsidian-900 border border-white/15 p-6 shadow-2xl space-y-4">
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-2xl flex items-center justify-center p-3 sm:p-5 overscroll-contain animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeModal();
+          }}
+        >
+          <div
+            className="relative w-full max-w-xl max-h-[88vh] flex flex-col rounded-3xl bg-obsidian-900 border border-white/15 p-5 sm:p-6 shadow-2xl overscroll-contain overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <span className="text-base">🎵</span>
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
@@ -425,134 +516,207 @@ const FavoriteTracksSection = () => {
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={closeModal}
-                className="text-slate-400 hover:text-white text-xs px-2.5 py-1 rounded-lg hover:bg-white/10"
+                className="text-slate-400 hover:text-white text-xs px-2.5 py-1 rounded-lg hover:bg-white/10 transition-colors"
               >
                 ✕ Close
               </button>
             </div>
 
-            {/* Quick Spotify / Apple Music Search */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                <span>Search Song or Artist</span>
-                <span className="text-[10px] text-purple-400 font-mono">Spotify & Apple HD Search</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  placeholder="e.g. Kesariya, Coldplay, Apna Bana Le, Ilahi..."
-                  className="w-full px-4 py-2.5 rounded-xl bg-obsidian-950 border border-white/15 text-white text-xs focus:outline-none focus:border-purple-500 placeholder-slate-500"
-                />
-                {isSearching && (
-                  <div className="absolute right-3 top-2.5 w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+            {/* Scrollable Modal Content */}
+            <div className="overflow-y-auto overscroll-contain custom-scrollbar flex-1 pr-1 space-y-4">
+              {/* Dual Filter: Song Title + Singer / Artist */}
+              <div className="space-y-2.5 p-3.5 rounded-2xl bg-white/[0.03] border border-white/10">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>🔍</span>
+                    <span>Search Song & Singer Filter</span>
+                  </label>
+                  <span className="text-[10px] text-purple-400 font-mono">Instant Spotify & Apple HD</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                      Song Title <span className="text-purple-400 font-normal">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={searchTitle}
+                      onChange={(e) => setSearchTitle(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleManualSearchTrigger()}
+                      placeholder="e.g. Boom, Love Dose, Kesariya..."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-obsidian-950 border border-white/15 text-white text-xs focus:outline-none focus:border-purple-500 placeholder-slate-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                      Singer / Artist <span className="text-slate-500 font-normal">(filter)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={searchArtist}
+                      onChange={(e) => setSearchArtist(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleManualSearchTrigger()}
+                      placeholder="e.g. Apache Indian, Honey Singh..."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-obsidian-950 border border-white/15 text-white text-xs focus:outline-none focus:border-purple-500 placeholder-slate-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Search Action / Status */}
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[11px] text-slate-400">
+                    {isSearching
+                      ? 'Searching tracks...'
+                      : searchResults.length > 0
+                      ? `Found ${searchResults.length} matching tracks`
+                      : 'Type song title or singer to find exact track'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleManualSearchTrigger}
+                    disabled={isSearching || (!searchTitle.trim() && !searchArtist.trim())}
+                    className="px-3.5 py-1.5 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-40 transition-all cursor-pointer"
+                  >
+                    {isSearching ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-purple-300 border-t-transparent rounded-full animate-spin" />
+                        <span>Searching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🔍</span>
+                        <span>Search Songs</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Search Results with Prominent Save Button */}
+                {searchResults.length > 0 && (
+                  <div className="max-h-56 overflow-y-auto overscroll-contain space-y-2 custom-scrollbar bg-obsidian-950/95 rounded-xl p-2 border border-white/10 mt-2">
+                    {searchResults.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between p-2 rounded-xl bg-white/[0.02] hover:bg-purple-600/15 border border-transparent hover:border-purple-500/30 transition-all gap-2"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="w-10 h-10 rounded-lg object-cover bg-obsidian-800 flex-shrink-0 shadow"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-white truncate">{item.name}</p>
+                            <p className="text-[11px] text-slate-400 truncate">{item.artist}</p>
+                          </div>
+                        </div>
+
+                        {/* Prominent Save Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleSelectSearchedTrack(item)}
+                          disabled={savingTrackId === item.id}
+                          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md hover:shadow-purple-500/25 transition-all flex items-center gap-1.5 flex-shrink-0 hover:scale-103 active:scale-97 disabled:opacity-70 cursor-pointer"
+                        >
+                          {savingTrackId === item.id ? (
+                            <>
+                              <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>💾</span>
+                              <span>Save to Top 5</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 
-              {/* Search Results Dropdown */}
-              {searchResults.length > 0 && (
-                <div className="max-h-48 overflow-y-auto space-y-1.5 custom-scrollbar bg-obsidian-950/90 rounded-xl p-2 border border-white/10">
-                  {searchResults.map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => handleSelectSearchedTrack(item)}
-                      className="flex items-center justify-between p-2 rounded-lg hover:bg-purple-600/20 cursor-pointer transition-colors group"
+              {/* Divider */}
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-white/10"></div>
+                <span className="flex-shrink mx-3 text-[10px] uppercase font-mono text-slate-500">
+                  or enter custom details
+                </span>
+                <div className="flex-grow border-t border-white/10"></div>
+              </div>
+
+              {/* Manual Form */}
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-400 block mb-1">Song Title *</label>
+                  <input
+                    type="text"
+                    value={manualTitle}
+                    onChange={(e) => setManualTitle(e.target.value)}
+                    placeholder="Song Title"
+                    className="w-full px-3.5 py-2 rounded-xl bg-obsidian-950 border border-white/10 text-white text-xs focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-400 block mb-1">Artist Name</label>
+                  <input
+                    type="text"
+                    value={manualArtist}
+                    onChange={(e) => setManualArtist(e.target.value)}
+                    placeholder="Artist"
+                    className="w-full px-3.5 py-2 rounded-xl bg-obsidian-950 border border-white/10 text-white text-xs focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-semibold text-slate-400">Artwork Image URL</label>
+                    <button
+                      type="button"
+                      onClick={handleFindArtwork}
+                      disabled={!manualTitle || isFetchingArt}
+                      className="text-[10px] text-cyan hover:underline disabled:opacity-50 font-mono cursor-pointer"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="w-9 h-9 rounded-md object-cover bg-obsidian-800 flex-shrink-0"
-                        />
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-white group-hover:text-purple-300 truncate">
-                            {item.name}
-                          </p>
-                          <p className="text-[11px] text-slate-400 truncate">{item.artist}</p>
-                        </div>
-                      </div>
-                      <span className="text-xs font-bold text-purple-400 group-hover:text-purple-300 flex-shrink-0 ml-2">
-                        + Select
-                      </span>
-                    </div>
-                  ))}
+                      {isFetchingArt ? 'Searching...' : '🔍 Auto-Find Artwork'}
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={manualImage}
+                    onChange={(e) => setManualImage(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full px-3.5 py-2 rounded-xl bg-obsidian-950 border border-white/10 text-white text-xs focus:outline-none focus:border-purple-500 font-mono text-[11px]"
+                  />
                 </div>
-              )}
+
+                {manualImage && (
+                  <div className="flex items-center gap-3 p-2 rounded-xl bg-obsidian-950 border border-white/10">
+                    <img src={manualImage} alt="Preview" className="w-10 h-10 rounded-lg object-cover" />
+                    <span className="text-[11px] text-slate-300 font-mono">Artwork preview loaded</span>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Divider */}
-            <div className="relative flex py-1 items-center">
-              <div className="flex-grow border-t border-white/10"></div>
-              <span className="flex-shrink mx-3 text-[10px] uppercase font-mono text-slate-500">or customize manually</span>
-              <div className="flex-grow border-t border-white/10"></div>
-            </div>
-
-            {/* Manual Form */}
-            <div className="space-y-3">
-              <div>
-                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Song Title *</label>
-                <input
-                  type="text"
-                  value={manualTitle}
-                  onChange={(e) => setManualTitle(e.target.value)}
-                  placeholder="Song Title"
-                  className="w-full px-3.5 py-2 rounded-xl bg-obsidian-950 border border-white/10 text-white text-xs focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Artist Name</label>
-                <input
-                  type="text"
-                  value={manualArtist}
-                  onChange={(e) => setManualArtist(e.target.value)}
-                  placeholder="Artist"
-                  className="w-full px-3.5 py-2 rounded-xl bg-obsidian-950 border border-white/10 text-white text-xs focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-[11px] font-semibold text-slate-400">Artwork Image URL</label>
-                  <button
-                    onClick={handleFindArtwork}
-                    disabled={!manualTitle || isFetchingArt}
-                    className="text-[10px] text-cyan hover:underline disabled:opacity-50 font-mono"
-                  >
-                    {isFetchingArt ? 'Searching...' : '🔍 Auto-Find Artwork'}
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  value={manualImage}
-                  onChange={(e) => setManualImage(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full px-3.5 py-2 rounded-xl bg-obsidian-950 border border-white/10 text-white text-xs focus:outline-none focus:border-purple-500 font-mono text-[11px]"
-                />
-              </div>
-
-              {manualImage && (
-                <div className="flex items-center gap-3 p-2 rounded-xl bg-obsidian-950 border border-white/10">
-                  <img src={manualImage} alt="Preview" className="w-10 h-10 rounded-lg object-cover" />
-                  <span className="text-[11px] text-slate-300 font-mono">Artwork preview loaded</span>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
+            {/* Modal Bottom Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10 flex-shrink-0">
               <button
+                type="button"
                 onClick={closeModal}
-                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold transition-all"
+                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleSaveManualTrack}
                 disabled={!manualTitle.trim()}
-                className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-bold shadow-md transition-all hover:scale-102"
+                className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-bold shadow-md transition-all hover:scale-102 cursor-pointer"
               >
                 Save Track to Database
               </button>
