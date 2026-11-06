@@ -12,6 +12,7 @@ import {
   cycleRepeatMode,
   toggleTurntable,
   toggleQueue,
+  setVideoMode,
 } from '../store/audioSlice';
 import AddToPlaylistButton from './AddToPlaylistButton';
 
@@ -47,6 +48,7 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
     isShuffle,
     repeatMode,
     activeMood,
+    isVideoMode,
   } = useSelector((state) => state.audio);
 
   const [isLiked, setIsLiked] = useState(false);
@@ -86,6 +88,12 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  const youtubeEmbedUrl = currentSong?.youtube_id
+    ? `https://www.youtube-nocookie.com/embed/${currentSong.youtube_id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1`
+    : `https://www.youtube-nocookie.com/embed?listType=search&list=${encodeURIComponent(
+        `${currentSong?.name || ''} ${currentSong?.artist || ''} official music video`
+      )}&autoplay=1`;
+
   const handleClose = () => {
     if (onClose) {
       onClose();
@@ -122,109 +130,178 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
   return (
     <div className={`relative w-full max-w-5xl mx-auto flex flex-col justify-between select-none ${isModal ? 'p-4 sm:p-8' : 'p-4 sm:p-6 my-4'}`}>
       {/* Top Bar / Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-obsidian-800/60 mb-6">
-        <div className="flex items-center gap-2.5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-obsidian-800/60 mb-6 gap-3">
+        <div className="flex items-center gap-3">
           <span className="w-2.5 h-2.5 rounded-full bg-cyan animate-pulse" />
           <h2 className="text-xs sm:text-sm font-bold text-white uppercase tracking-widest font-mono">
-            Analog Vinyl Turntable
+            {isVideoMode ? 'HD Music Video Player' : 'Analog Vinyl Turntable'}
           </h2>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-obsidian-800 text-slate-300 border border-obsidian-750">
-            33 ⅓ RPM
+            {isVideoMode ? '1080p Video' : '33 ⅓ RPM'}
           </span>
         </div>
 
-        <button
-          onClick={handleClose}
-          className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-white bg-obsidian-900/80 hover:bg-obsidian-800 border border-obsidian-750 transition-colors"
-          title="Minimize Turntable"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2.5 self-end sm:self-auto">
+          {/* Dual Audio / Video Section Toggle Switcher (Requirement 3) */}
+          <div className="flex items-center p-0.5 rounded-xl bg-obsidian-950/80 border border-white/10 shadow-inner">
+            <button
+              onClick={() => dispatch(setVideoMode(false))}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                !isVideoMode
+                  ? 'bg-cyan/20 text-cyan border border-cyan/40 shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Switch to Analog Vinyl Audio"
+            >
+              <span>🎵</span>
+              <span>Vinyl Audio</span>
+            </button>
+            <button
+              onClick={() => dispatch(setVideoMode(true))}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                isVideoMode
+                  ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Switch to Music Video Section"
+            >
+              <span>🎬</span>
+              <span>Music Video</span>
+            </button>
+          </div>
+
+          <button
+            onClick={handleClose}
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-white bg-obsidian-900/80 hover:bg-obsidian-800 border border-obsidian-750 transition-colors"
+            title="Minimize to Bottom Bar"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      {/* Main Showcase Stage: Vinyl Disc + Tonearm */}
+      {/* Main Showcase Stage: Vinyl Disc OR Music Video (Requirement 3) */}
       <div className="relative flex flex-col lg:flex-row items-center justify-around gap-8 sm:gap-12 my-6">
-        {/* Dynamic Color Bleed Halo behind Turntable */}
+        {/* Dynamic Color Bleed Halo behind Player */}
         <div
           className="absolute w-80 h-80 sm:w-96 sm:h-96 rounded-full blur-3xl opacity-30 transition-all duration-1000 pointer-events-none"
-          style={{ backgroundColor: moodColor }}
+          style={{ backgroundColor: isVideoMode ? '#EF4444' : moodColor }}
         />
 
-        {/* 12" Vinyl Disc Enclosure */}
-        <div className="relative w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96 flex items-center justify-center">
-          {/* Turntable Platter Base */}
-          <div
-            className="absolute inset-0 rounded-full bg-obsidian-950 border border-obsidian-800 shadow-2xl"
-            style={{
-              boxShadow: `0 25px 60px -15px rgba(0,0,0,0.9), 0 0 30px ${moodColor}33`,
-            }}
-          />
+        {/* EITHER: 16:9 Widescreen Music Video Section OR 12" Vinyl Disc */}
+        {isVideoMode ? (
+          <div className="flex flex-col items-center w-full max-w-lg">
+            <div className="relative w-full aspect-video rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-black flex flex-col justify-between group">
+              <iframe
+                src={youtubeEmbedUrl}
+                title={`${currentSong.name} - ${currentSong.artist}`}
+                className="w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
 
-          {/* Rotating Vinyl Record */}
-          <div
-            className={`relative w-[92%] h-[92%] rounded-full bg-[#0a0a0a] flex items-center justify-center shadow-2xl transition-transform ${
-              isPlaying ? 'animate-spin [animation-duration:6s]' : ''
-            }`}
-            style={{
-              boxShadow: 'inset 0 0 30px rgba(0,0,0,0.9), 0 4px 15px rgba(0,0,0,0.6)',
-            }}
-          >
-            {/* Concentric Vinyl Grooves */}
-            <div className="absolute inset-4 rounded-full border border-white/5 opacity-50" />
-            <div className="absolute inset-8 rounded-full border border-white/5 opacity-60" />
-            <div className="absolute inset-12 rounded-full border border-white/5 opacity-70" />
-            <div className="absolute inset-16 rounded-full border border-white/5 opacity-50" />
-            <div className="absolute inset-20 rounded-full border border-white/5 opacity-60" />
-            <div className="absolute inset-24 rounded-full border border-white/5 opacity-40" />
+              {/* Video Badge Overlay */}
+              <div className="absolute top-2 left-2 z-10 pointer-events-none flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[10px] font-mono text-rose-400 border border-rose-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                <span>HD Music Video</span>
+              </div>
+            </div>
 
-            {/* High-Gloss Vinyl Sheen Overlay */}
-            <div
-              className="absolute inset-0 rounded-full pointer-events-none opacity-25"
-              style={{
-                background:
-                  'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, transparent 40%, rgba(255,255,255,0.2) 60%, transparent 100%)',
-              }}
-            />
-
-            {/* Center Album Art Label */}
-            <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden border-4 border-obsidian-950 shadow-inner flex items-center justify-center bg-obsidian-900">
-              <img
-                src={
-                  currentSong.image ||
-                  'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80'
-                }
-                alt={currentSong.name}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  e.target.src =
-                    'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80';
+            {/* Quick Switch Button to Vinyl */}
+            <button
+              onClick={() => dispatch(setVideoMode(false))}
+              className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 hover:bg-cyan/20 text-slate-300 hover:text-cyan border border-white/10 hover:border-cyan/30 text-xs font-semibold transition-all hover:scale-105"
+            >
+              <span>🎵 Switch to Analog Vinyl Turntable</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center">
+            {/* 12" Vinyl Disc Enclosure */}
+            <div className="relative w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96 flex items-center justify-center">
+              {/* Turntable Platter Base */}
+              <div
+                className="absolute inset-0 rounded-full bg-obsidian-950 border border-obsidian-800 shadow-2xl"
+                style={{
+                  boxShadow: `0 25px 60px -15px rgba(0,0,0,0.9), 0 0 30px ${moodColor}33`,
                 }}
               />
-              {/* Center Spindle Hole */}
-              <div className="absolute w-4 h-4 rounded-full bg-obsidian-950 border-2 border-white/40 shadow-inner" />
-            </div>
-          </div>
 
-          {/* Mechanical Tonearm Assembly */}
-          <div
-            className={`absolute -top-4 -right-4 w-28 h-48 sm:w-36 sm:h-56 pointer-events-none origin-top-right transition-transform duration-700 ease-out z-20 ${
-              isPlaying ? 'rotate-12 translate-x-1' : '-rotate-6'
-            }`}
-          >
-            {/* Pivot Base */}
-            <div className="absolute top-2 right-2 w-8 h-8 rounded-full bg-gradient-to-br from-slate-400 to-slate-700 border border-slate-400 shadow-md flex items-center justify-center">
-              <div className="w-3 h-3 rounded-full bg-slate-900" />
+              {/* Rotating Vinyl Record */}
+              <div
+                className={`relative w-[92%] h-[92%] rounded-full bg-[#0a0a0a] flex items-center justify-center shadow-2xl transition-transform ${
+                  isPlaying ? 'animate-spin [animation-duration:6s]' : ''
+                }`}
+                style={{
+                  boxShadow: 'inset 0 0 30px rgba(0,0,0,0.9), 0 4px 15px rgba(0,0,0,0.6)',
+                }}
+              >
+                {/* Concentric Vinyl Grooves */}
+                <div className="absolute inset-4 rounded-full border border-white/5 opacity-50" />
+                <div className="absolute inset-8 rounded-full border border-white/5 opacity-60" />
+                <div className="absolute inset-12 rounded-full border border-white/5 opacity-70" />
+                <div className="absolute inset-16 rounded-full border border-white/5 opacity-50" />
+                <div className="absolute inset-20 rounded-full border border-white/5 opacity-60" />
+                <div className="absolute inset-24 rounded-full border border-white/5 opacity-40" />
+
+                {/* High-Gloss Vinyl Sheen Overlay */}
+                <div
+                  className="absolute inset-0 rounded-full pointer-events-none opacity-25"
+                  style={{
+                    background:
+                      'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, transparent 40%, rgba(255,255,255,0.2) 60%, transparent 100%)',
+                  }}
+                />
+
+                {/* Center Album Art Label */}
+                <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden border-4 border-obsidian-950 shadow-inner flex items-center justify-center bg-obsidian-900">
+                  <img
+                    src={
+                      currentSong.image ||
+                      'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80'
+                    }
+                    alt={currentSong.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.src =
+                        'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80';
+                    }}
+                  />
+                  {/* Center Spindle Hole */}
+                  <div className="absolute w-4 h-4 rounded-full bg-obsidian-950 border-2 border-white/40 shadow-inner" />
+                </div>
+              </div>
+
+              {/* Mechanical Tonearm Assembly */}
+              <div
+                className={`absolute -top-4 -right-4 w-28 h-48 sm:w-36 sm:h-56 pointer-events-none origin-top-right transition-transform duration-700 ease-out z-20 ${
+                  isPlaying ? 'rotate-12 translate-x-1' : '-rotate-6'
+                }`}
+              >
+                {/* Pivot Base */}
+                <div className="absolute top-2 right-2 w-8 h-8 rounded-full bg-gradient-to-br from-slate-400 to-slate-700 border border-slate-400 shadow-md flex items-center justify-center">
+                  <div className="w-3 h-3 rounded-full bg-slate-900" />
+                </div>
+                {/* Curved Metallic Arm */}
+                <div className="absolute top-6 right-5 w-1.5 h-36 bg-gradient-to-b from-slate-300 via-slate-400 to-slate-600 rounded-full shadow-lg transform -rotate-12 origin-top" />
+                {/* Cartridge & Stylus Needle */}
+                <div className="absolute bottom-6 left-6 w-4 h-7 bg-slate-900 border border-slate-600 rounded-sm shadow-md flex flex-col items-center justify-end">
+                  <div className="w-1 h-1.5 bg-amber-400 rounded-full" />
+                </div>
+              </div>
             </div>
-            {/* Curved Metallic Arm */}
-            <div className="absolute top-6 right-5 w-1.5 h-36 bg-gradient-to-b from-slate-300 via-slate-400 to-slate-600 rounded-full shadow-lg transform -rotate-12 origin-top" />
-            {/* Cartridge & Stylus Needle */}
-            <div className="absolute bottom-6 left-6 w-4 h-7 bg-slate-900 border border-slate-600 rounded-sm shadow-md flex flex-col items-center justify-end">
-              <div className="w-1 h-1.5 bg-amber-400 rounded-full" />
-            </div>
+
+            {/* Quick Switch Button to Video */}
+            <button
+              onClick={() => dispatch(setVideoMode(true))}
+              className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 hover:bg-rose-500/20 text-slate-300 hover:text-rose-300 border border-white/10 hover:border-rose-500/30 text-xs font-semibold transition-all hover:scale-105"
+            >
+              <span>🎬 Watch Official Music Video</span>
+            </button>
           </div>
-        </div>
+        )}
 
         {/* Right Stage: Now Playing Info & Explainable AI */}
         <div className="flex-1 max-w-md w-full space-y-4 text-center lg:text-left">

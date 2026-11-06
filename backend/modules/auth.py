@@ -109,3 +109,18 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(401, "Invalid authentication credentials")
 
     return {"user_id": user_id, "email": payload.get("email")}
+
+
+security_optional = HTTPBearer(auto_error=False)
+
+async def get_optional_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_optional)) -> Optional[dict]:
+    if not credentials:
+        return None
+    try:
+        payload = decode_access_token(credentials.credentials)
+        user_id = payload.get("user_id") or payload.get("sub")
+        if user_id:
+            return {"user_id": user_id, "email": payload.get("email")}
+    except Exception:
+        pass
+    return None

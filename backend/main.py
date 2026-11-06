@@ -47,8 +47,10 @@ from modules.auth import (
     UserResponse,
     TokenResponse,
     create_access_token,
-    get_current_user
+    get_current_user,
+    get_optional_user
 )
+from modules.artwork_service import artwork_service
 
 # Services
 from modules.user_service import user_service
@@ -81,6 +83,7 @@ app.add_middleware(
 # LOCAL IN-MEMORY PLAYLIST STORAGE
 # -----------------------------------------------------------
 user_playlists = defaultdict(list)
+user_favorites_db = defaultdict(list)
 user_preferences = defaultdict(lambda: {
     'favorite_artists': [],
     'favorite_genres': [],
@@ -443,6 +446,108 @@ async def remove_song_from_playlist(
 ):
     return await playlist_service.remove_song_from_playlist(playlist_id, current_user["user_id"], song_id)
 
+
+
+# ===========================================================
+#  USER FAVORITE TRACKS (UP TO 5, DATABASE-BACKED)
+# ===========================================================
+from pydantic import BaseModel
+
+class FavoriteTrack(BaseModel):
+    id: str
+    name: str
+    artist: str
+    image: Optional[str] = None
+    youtube_id: Optional[str] = None
+    duration: Optional[int] = None
+    mood_match: Optional[str] = "Favorite"
+
+class FavoriteTracksPayload(BaseModel):
+    favorites: list[FavoriteTrack]
+
+@app.get("/api/user/favorites")
+async def get_user_favorites(current_user: Optional[dict] = Depends(get_optional_user)):
+    user_id = current_user["user_id"] if current_user else "default"
+    database = get_database()
+    if database is not None:
+        try:
+            doc = await database.user_favorites.find_one({"user_id": user_id})
+            if doc and "favorites" in doc:
+                return {"favorites": doc["favorites"], "source": "database"}
+        except Exception as e:
+            print(f"DB load favorites error: {e}")
+    return {"favorites": user_favorites_db.get(user_id, []), "source": "memory"}
+
+@app.post("/api/user/favorites")
+async def save_user_favorites(
+    payload: FavoriteTracksPayload,
+    current_user: Optional[dict] = Depends(get_optional_user)
+):
+    user_id = current_user["user_id"] if current_user else "default"
+    favs = payload.favorites[:5]
+    resolved_favs = []
+    for f in favs:
+        d = f.dict()
+        if not d.get("image") or "unsplash" in d.get("image", ""):
+            art = artwork_service.get_track_artwork(d["name"], d["artist"])
+            if art:
+                d["image"] = art
+        resolved_favs.append(d)
+
+    user_favorites_db[user_id] = resolved_favs
+
+    database = get_database()
+    saved_to_db = False
+    if database is not None:
+        try:
+            await database.user_favorites.update_one(
+                {"user_id": user_id},
+                {"$set": {
+                    "user_id": user_id,
+                    "favorites": resolved_favs,
+                    "updated_at": datetime.utcnow().isoformat()
+                }},
+                upsert=True
+            )
+            saved_to_db = True
+        except Exception as e:
+            print(f"DB save favorites error: {e}")
+
+    return {
+        "message": "Favorites saved successfully",
+        "favorites": resolved_favs,
+        "saved_to_db": saved_to_db
+    }
+
+@app.delete("/api/user/favorites/{song_id}")
+async def delete_user_favorite(
+    song_id: str,
+    current_user: Optional[dict] = Depends(get_optional_user)
+):
+    user_id = current_user["user_id"] if current_user else "default"
+    user_favorites_db[user_id] = [
+        s for s in user_favorites_db[user_id] if s.get("id") != song_id
+    ]
+    database = get_database()
+    if database is not None:
+        try:
+            await database.user_favorites.update_one(
+                {"user_id": user_id},
+                {"$set": {"favorites": user_favorites_db[user_id]}}
+            )
+        except Exception as e:
+            print(f"DB delete favorite error: {e}")
+    return {"message": "Track removed from favorites", "favorites": user_favorites_db[user_id]}
+
+@app.get("/api/search-tracks")
+async def search_tracks_endpoint(q: str, limit: int = 5):
+    tracks = artwork_service.search_tracks(q, limit=limit)
+    return {"tracks": tracks}
+
+@app.get("/api/track-artwork")
+async def get_track_artwork_endpoint(name: str, artist: str = ""):
+    img = artwork_service.get_track_artwork(name, artist)
+    return {"image": img}
 
 # ===========================================================
 #  HEALTH & ROOT

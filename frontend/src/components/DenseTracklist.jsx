@@ -10,10 +10,17 @@ const formatDuration = (seconds) => {
   return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 };
 
-const DenseTracklist = ({ songs = [], title = 'Recommended Stream', subtitle = 'AI-Curated' }) => {
+const DenseTracklist = ({
+  songs = [],
+  title = 'Recommended Stream',
+  subtitle = 'AI-Curated',
+  defaultExpanded = true,
+  allowToggle = true,
+}) => {
   const dispatch = useDispatch();
-  const { currentSong, isPlaying } = useSelector((state) => state.audio);
+  const { currentSong, isPlaying, activeMood } = useSelector((state) => state.audio);
 
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [likedMap, setLikedMap] = useState({});
 
   useEffect(() => {
@@ -47,41 +54,77 @@ const DenseTracklist = ({ songs = [], title = 'Recommended Stream', subtitle = '
         </div>
         <p className="text-sm font-semibold text-white">No active stream loaded</p>
         <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-          Turn the Rotary Mood Dial above or use the Multi-Modal studio to curate an authentic stream.
+          Select or detect your mood to curate an authentic stream.
         </p>
       </div>
     );
   }
 
+  // Display either top 5 (minimised) or all songs (maximised)
+  const visibleSongs = (allowToggle && !isExpanded && songs.length > 5)
+    ? songs.slice(0, 5)
+    : songs;
+
   return (
-    <div className="bg-obsidian-900/70 backdrop-blur-2xl border border-obsidian-800/90 rounded-3xl p-4 sm:p-6 shadow-2xl shadow-black/80 my-8">
+    <div className="bg-obsidian-900/70 backdrop-blur-2xl border border-white/10 rounded-3xl p-4 sm:p-6 shadow-2xl my-8 transition-all duration-300">
       {/* Table Section Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-obsidian-800/60 mb-3 px-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-white/10 mb-3 px-2 gap-3">
         <div className="flex items-center gap-3">
           <div className="w-2.5 h-2.5 rounded-full bg-cyan shadow-[0_0_8px_#00F2FE]" />
           <div>
-            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-              {title}
+            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
+              <span>{title}</span>
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/10">
+                {isExpanded ? `All ${songs.length} Tracks` : `Preview: 5 of ${songs.length}`}
+              </span>
             </h3>
             <p className="text-[11px] text-slate-400">
-              {subtitle} • {songs.length} Tracks
+              {subtitle} • {isExpanded ? 'Showing full curated queue' : 'Compact view active'}
             </p>
           </div>
         </div>
 
-        <button
-          onClick={() => handleRowClick(songs[0])}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan/15 hover:bg-cyan/25 text-cyan border border-cyan/30 text-xs font-bold transition-all shadow-sm"
-        >
-          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-          <span>Play All</span>
-        </button>
+        <div className="flex items-center gap-2.5 self-end sm:self-auto">
+          {/* Minimise / Maximise Toggle Button (User Request 3) */}
+          {allowToggle && songs.length > 5 && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-obsidian-800 hover:bg-obsidian-750 text-slate-200 border border-white/15 text-xs font-semibold transition-all hover:scale-102 active:scale-98 shadow-sm"
+              title={isExpanded ? 'Minimise view to top 5 tracks' : 'Maximise to view all tracks'}
+            >
+              {isExpanded ? (
+                <>
+                  <svg className="w-3.5 h-3.5 text-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                  <span>⤡ Minimise ({songs.length})</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5 text-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  </svg>
+                  <span>⤢ Maximise All ({songs.length})</span>
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Play All Button */}
+          <button
+            onClick={() => handleRowClick(songs[0])}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan/15 hover:bg-cyan/25 text-cyan border border-cyan/30 text-xs font-bold transition-all shadow-sm hover:scale-102"
+          >
+            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            <span>Play Stream</span>
+          </button>
+        </div>
       </div>
 
       {/* Desktop Table Header */}
-      <div className="hidden md:grid grid-cols-12 gap-4 px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-obsidian-800/40">
+      <div className="hidden md:grid grid-cols-12 gap-4 px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-white/5">
         <div className="col-span-1 text-center">#</div>
         <div className="col-span-4">Title & Artist</div>
         <div className="col-span-2">Mood Vibe</div>
@@ -91,8 +134,8 @@ const DenseTracklist = ({ songs = [], title = 'Recommended Stream', subtitle = '
       </div>
 
       {/* Tracklist Rows */}
-      <div className="divide-y divide-obsidian-850/50 mt-1">
-        {songs.map((song, idx) => {
+      <div className="divide-y divide-white/5 mt-1">
+        {visibleSongs.map((song, idx) => {
           const isCurrent =
             currentSong &&
             (currentSong.id === song.id ||
@@ -106,7 +149,7 @@ const DenseTracklist = ({ songs = [], title = 'Recommended Stream', subtitle = '
               className={`group flex md:grid md:grid-cols-12 items-center gap-3 md:gap-4 px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
                 isCurrent
                   ? 'bg-cyan/10 border border-cyan/30 shadow-md shadow-cyan/5'
-                  : 'hover:bg-obsidian-800/60 border border-transparent hover:border-obsidian-750/50'
+                  : 'hover:bg-white/5 border border-transparent hover:border-white/10'
               }`}
             >
               {/* Col 1: Index / Active Equalizer / Play icon */}
@@ -128,7 +171,7 @@ const DenseTracklist = ({ songs = [], title = 'Recommended Stream', subtitle = '
                     </span>
                     <button
                       className="hidden group-hover:inline-flex text-cyan hover:scale-110 transition-transform"
-                      title="Play"
+                      title="Play on Turntable"
                     >
                       <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                         <path d="M8 5v14l11-7z" />
@@ -146,7 +189,7 @@ const DenseTracklist = ({ songs = [], title = 'Recommended Stream', subtitle = '
                     'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&auto=format&fit=crop&q=80'
                   }
                   alt={song.name}
-                  className="w-11 h-11 rounded-lg object-cover bg-obsidian-800 flex-shrink-0"
+                  className="w-11 h-11 rounded-lg object-cover bg-obsidian-800 flex-shrink-0 shadow-sm"
                   onError={(e) => {
                     e.target.src =
                       'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&auto=format&fit=crop&q=80';
@@ -166,7 +209,7 @@ const DenseTracklist = ({ songs = [], title = 'Recommended Stream', subtitle = '
 
               {/* Col 3: Mood Vibe */}
               <div className="hidden md:block md:col-span-2">
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-obsidian-800 text-slate-300 border border-obsidian-700/60 capitalize">
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-obsidian-800 text-slate-300 border border-white/10 capitalize">
                   <span>✨</span>
                   <span>{song.mood_match || 'Dynamic Match'}</span>
                 </span>
@@ -200,7 +243,7 @@ const DenseTracklist = ({ songs = [], title = 'Recommended Stream', subtitle = '
                   className={`p-1.5 rounded-lg transition-colors ${
                     isLiked
                       ? 'text-rose-500'
-                      : 'text-slate-400 hover:text-white hover:bg-obsidian-800'
+                      : 'text-slate-400 hover:text-white hover:bg-white/10'
                   }`}
                   title={isLiked ? 'Unlike' : 'Like'}
                 >
@@ -225,6 +268,32 @@ const DenseTracklist = ({ songs = [], title = 'Recommended Stream', subtitle = '
           );
         })}
       </div>
+
+      {/* Bottom Minimise / Maximise Callout Banner (User Request 3) */}
+      {allowToggle && songs.length > 5 && (
+        <div className="pt-4 border-t border-white/10 mt-3 flex items-center justify-between px-2">
+          <span className="text-xs text-slate-400 font-mono">
+            {isExpanded
+              ? `Showing all ${songs.length} curated recommendations`
+              : `Showing top 5 of ${songs.length} recommendations`}
+          </span>
+
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-cyan border border-cyan/20 transition-all hover:scale-102"
+          >
+            {isExpanded ? (
+              <>
+                <span>▲ Minimise to Top 5</span>
+              </>
+            ) : (
+              <>
+                <span>▼ Maximise All ({songs.length} Tracks)</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

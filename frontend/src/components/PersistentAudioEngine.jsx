@@ -24,6 +24,7 @@ const PersistentAudioEngine = () => {
     volume,
     isMuted,
     seekTarget,
+    isVideoMode,
   } = useSelector((state) => state.audio);
 
   // 1. Load YouTube IFrame API script dynamically once
@@ -172,6 +173,18 @@ const PersistentAudioEngine = () => {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
   }, [isPlaying, dispatch]);
+
+  // 7. When user switches to Music Video section, pause background audio to prevent double sound
+  useEffect(() => {
+    if (!playerRef.current || typeof playerRef.current.pauseVideo !== 'function') return;
+    try {
+      if (isVideoMode) {
+        playerRef.current.pauseVideo();
+      } else if (isPlaying && currentSong?.youtube_id) {
+        playerRef.current.playVideo();
+      }
+    } catch (e) {}
+  }, [isVideoMode, isPlaying, currentSong]);
 
   return (
     <div

@@ -5,6 +5,7 @@ import Webcam from 'react-webcam';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 import { playSong, setQueue, setActiveMood } from '../store/audioSlice';
+import FavoriteTracksSection from '../components/FavoriteTracksSection';
 
 const MOOD_META = {
   happy: {
@@ -71,7 +72,7 @@ const DEFAULT_AURA_PICKS = [
     youtube_id: 'BddP6PYo2gs',
     mood_match: 'Happy',
     duration: 268,
-    image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300&auto=format&fit=crop&q=80',
+    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/9f/13/ca/9f13ca3b-e533-03e0-f19a-f0aaa774581d/196589311191.jpg/600x600bb.jpg',
   },
   {
     id: 'aura-2',
@@ -80,7 +81,7 @@ const DEFAULT_AURA_PICKS = [
     youtube_id: 'gvyUuxdRdR4',
     mood_match: 'Romantic',
     duration: 230,
-    image: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=300&auto=format&fit=crop&q=80',
+    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/61/65/ae/6165aee9-8bb9-0bd4-02b0-5d0f1e6257a3/886449510238.jpg/600x600bb.jpg',
   },
   {
     id: 'aura-3',
@@ -89,7 +90,7 @@ const DEFAULT_AURA_PICKS = [
     youtube_id: 'fdubeMFwuGs',
     mood_match: 'Energetic',
     duration: 228,
-    image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=300&auto=format&fit=crop&q=80',
+    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/62/d6/74/62d67432-0670-631f-db6a-d4bac3adae4b/8902894353328_cover.jpg/600x600bb.jpg',
   },
 ];
 
@@ -155,6 +156,14 @@ const HomePage = () => {
         const parsedPicks = JSON.parse(stored);
         if (Array.isArray(parsedPicks) && parsedPicks.length >= 3) {
           setPersonalizedPicks(parsedPicks.slice(0, 3));
+        }
+      }
+
+      const storedRecs = localStorage.getItem('recommendations');
+      if (storedRecs) {
+        const parsedRecs = JSON.parse(storedRecs);
+        if (Array.isArray(parsedRecs) && parsedRecs.length > 0) {
+          setAllRecommendations(parsedRecs);
         }
       }
     } catch (e) {}
@@ -516,85 +525,9 @@ const HomePage = () => {
         </div>
 
         {/* ============================================================== */}
-        {/* BOTTOM ROW: "Your Personalized Picks" (3 Large Glass Cards)    */}
+        {/* FAVORITE TRACKS SECTION (UP TO 5, CUSTOMIZABLE, DB-SYNCED)     */}
         {/* ============================================================== */}
-        <div className="space-y-4 pt-4 sm:pt-8 pb-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2 drop-shadow">
-              <span>Your Personalized Picks</span>
-              {detectionSource === 'face' && (
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  Curated for your facial expression
-                </span>
-              )}
-            </h3>
-
-            <button
-              onClick={() => navigate('/recommendations')}
-              className="text-xs font-semibold text-cyan hover:text-cyan/80 flex items-center gap-1 transition-colors"
-            >
-              <span>Go to Recommendation Engine</span>
-              <span>→</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-            {personalizedPicks.slice(0, 3).map((song) => {
-              const isCurrentPlaying = currentSong?.youtube_id === song.youtube_id && isPlaying;
-
-              return (
-                <div
-                  key={song.id || song.youtube_id || song.name}
-                  onClick={() => handlePlaySong(song)}
-                  className="group relative flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-slate-900/50 hover:bg-slate-900/70 border border-white/10 hover:border-purple-500/50 backdrop-blur-2xl shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden"
-                >
-                  {/* Left Side: Artwork Thumbnail + Metadata */}
-                  <div className="flex items-center gap-3.5 min-w-0 pr-3">
-                    <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden flex-shrink-0 bg-obsidian-800 shadow-md">
-                      <img
-                        src={song.image || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300&auto=format&fit=crop&q=80'}
-                        alt={song.name}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                      />
-                      {isCurrentPlaying && (
-                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                          <div className="flex items-end gap-0.5 h-4">
-                            <span className="w-1 bg-cyan rounded-full animate-pulse h-full" />
-                            <span className="w-1 bg-purple-400 rounded-full animate-pulse h-2/3" />
-                            <span className="w-1 bg-amber-400 rounded-full animate-pulse h-4/5" />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="min-w-0">
-                      <h4 className="text-sm sm:text-base font-bold text-white group-hover:text-purple-300 transition-colors truncate">
-                        {song.name}
-                      </h4>
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
-                        {song.artist}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Right Side: Red YouTube Play Pill */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePlaySong(song);
-                    }}
-                    className="flex-shrink-0 w-11 h-7 sm:w-12 sm:h-8 rounded-lg bg-[#FF0000] hover:bg-[#D90000] text-white flex items-center justify-center shadow-md hover:scale-110 active:scale-95 transition-all duration-200"
-                    title={`Play ${song.name} on YouTube`}
-                  >
-                    <svg className="w-4 h-4 fill-current ml-0.5" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <FavoriteTracksSection />
       </div>
 
       {/* ============================================================== */}

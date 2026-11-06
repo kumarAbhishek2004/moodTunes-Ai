@@ -23,6 +23,7 @@ const initialState = {
   seekTarget: null, // trigger seek in engine
   activeMood: initialMood,
   isTurntableOpen: false,
+  isVideoMode: false,
   isQueueOpen: false,
   isShuffle: false,
   repeatMode: 'off', // 'off' | 'all' | 'one'
@@ -38,6 +39,8 @@ export const audioSlice = createSlice({
       state.currentSong = song;
       state.isPlaying = true;
       state.currentTime = 0;
+      state.isTurntableOpen = true; // Open on music player section when music is played!
+      state.isVideoMode = false;
       
       // Update mood if song carries a match
       if (song.mood_match) {
@@ -243,6 +246,14 @@ export const audioSlice = createSlice({
         localStorage.removeItem('recommendations');
       } catch (e) {}
     },
+
+    setVideoMode: (state, action) => {
+      state.isVideoMode = action.payload;
+    },
+
+    toggleVideoMode: (state) => {
+      state.isVideoMode = !state.isVideoMode;
+    },
   },
 });
 
@@ -262,6 +273,8 @@ export const {
   setActiveMood,
   setTurntableOpen,
   toggleTurntable,
+  setVideoMode,
+  toggleVideoMode,
   toggleQueue,
   toggleShuffle,
   cycleRepeatMode,
