@@ -52,6 +52,18 @@ class MoodDetector:
         'intense': {
             'tags': ['rock', 'metal', 'punk'],
             'description': 'powerful music'
+        },
+        'focus': {
+            'tags': ['ambient', 'lo-fi', 'chill', 'instrumental'],
+            'description': 'deep focus, instrumental and lo-fi beats'
+        },
+        'romantic': {
+            'tags': ['romantic', 'acoustic', 'bollywood', 'love'],
+            'description': 'warm soulful harmonies and intimate vocals'
+        },
+        'reflective': {
+            'tags': ['acoustic', 'sad', 'piano', 'slow'],
+            'description': 'gentle melancholic comfort and slow tempo'
         }
     }
 

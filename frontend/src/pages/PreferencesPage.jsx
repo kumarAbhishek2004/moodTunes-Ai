@@ -1,117 +1,80 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Header from '../components/Header';
-import Particles from '../components/Particles';
 import PreferenceSelection from '../components/PreferenceSelection';
-import Chatbot from '../components/Chatbot';
 
 const PreferencesPage = () => {
   const navigate = useNavigate();
   const [mood, setMood] = useState(null);
-  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
-
-  const handlePlaySong = (song) => {
-    localStorage.setItem('recommendations', JSON.stringify([song]));
-    navigate('/player');
-  };
-
-  const handlePlayPlaylist = (playlist) => {
-    if (playlist && playlist.songs && playlist.songs.length > 0) {
-      localStorage.setItem('recommendations', JSON.stringify(playlist.songs));
-      navigate('/player');
-    }
-  };
 
   useEffect(() => {
-    // Get mood from localStorage
-    const storedMood = localStorage.getItem('selectedMood');
-    if (storedMood) {
-      setMood(JSON.parse(storedMood));
-    } else {
-      // If no mood selected, redirect to mood detection
-      navigate('/mood-detection');
+    try {
+      const storedMood = localStorage.getItem('selectedMood');
+      if (storedMood) {
+        setMood(JSON.parse(storedMood));
+      } else {
+        // If no mood is set yet, default to happy
+        setMood({ mood: 'happy', source: 'manual' });
+      }
+    } catch (e) {
+      setMood({ mood: 'happy', source: 'manual' });
     }
   }, [navigate]);
 
   const handlePreferencesSet = (preferences) => {
-    // Store preferences in localStorage
+    // Clear old cached recommendations so fresh ones are computed for these preferences
+    localStorage.removeItem('recommendations');
+    // Store user preferences in localStorage
     localStorage.setItem('userPreferences', JSON.stringify(preferences));
-    // Navigate to recommendations page
+    // Directly navigate to recommendations page
     navigate('/recommendations');
   };
 
   if (!mood) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
+  const moodKey = typeof mood === 'string' ? mood : mood.mood || 'happy';
+  const isFaceVerified = mood.source === 'face' && mood.confidence;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900">
-      <Particles />
-      
-      <div className="relative z-10">
-        <Header />
-        
-        <div className="container mx-auto px-6 py-12">
-          {/* Back Button */}
-          <button
-            onClick={() => navigate('/mood-detection')}
-            className="mb-6 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            <span>Back to Mood Detection</span>
-          </button>
+    <div className="container mx-auto px-4 sm:px-6 py-6 md:py-8 max-w-6xl animate-fadeIn">
+      {/* Top Navigation Row */}
+      <div className="flex items-center justify-between mb-6">
+        <button
+          onClick={() => navigate('/')}
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white px-3.5 py-2 rounded-xl bg-obsidian-900/80 border border-white/10 hover:border-white/20 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          <span>Back to Home</span>
+        </button>
 
-          {/* Page Header */}
-          <div className="text-center mb-12 animate-fadeIn">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl mb-6 shadow-2xl">
-              <span className="text-4xl">⚙️</span>
-            </div>
-            <h1 className="text-5xl font-black text-white mb-4">
-               Set Your Preferences
-            </h1>
-            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Choose your language, add favorite artists and songs to personalize your recommendations
-            </p>
-
-            {/* Current Mood Badge */}
-            <div className="mt-6 inline-flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 px-4 py-2 rounded-xl">
-              <span className="text-gray-400 text-sm">Current Mood:</span>
-              <span className="text-white font-semibold capitalize">{mood.mood || mood}</span>
-            </div>
-          </div>
-
-          {/* Preferences Component */}
-          <PreferenceSelection
-            mood={mood}
-            onPreferencesSet={handlePreferencesSet}
-          />
+        {/* Current Mood Pill */}
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-obsidian-900/80 border border-white/10 text-xs font-mono">
+          <span className="text-slate-400">Current Mood:</span>
+          <span className="text-white font-bold capitalize">{moodKey}</span>
+          {isFaceVerified ? (
+            <span className="ml-1 text-[10px] text-purple-300 px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/30">
+              📸 {Math.round(mood.confidence)}% Confidence
+            </span>
+          ) : mood.source === 'manual' ? (
+            <span className="ml-1 text-[10px] text-cyan px-2 py-0.5 rounded-full bg-cyan/15 border border-cyan/30">
+              🎯 Manual
+            </span>
+          ) : null}
         </div>
       </div>
 
-      {/* Floating Chatbot */}
-      <Chatbot
-        isOpen={isChatbotOpen}
-        onToggle={() => setIsChatbotOpen(!isChatbotOpen)}
-        currentMood={mood}
-        onPlaySong={handlePlaySong}
-        onPlayPlaylist={handlePlayPlaylist}
+      {/* Preferences Form Component */}
+      <PreferenceSelection
+        mood={mood}
+        onPreferencesSet={handlePreferencesSet}
       />
-
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(30px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.8s ease-out;
-        }
-      `}</style>
     </div>
   );
 };

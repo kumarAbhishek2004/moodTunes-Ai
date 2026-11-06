@@ -133,8 +133,21 @@ const RecommendationsPage = () => {
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan/10 border border-cyan/30 text-cyan text-xs font-mono font-bold mb-3">
-              <span>● LIVE AI STREAM</span>
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan/10 border border-cyan/30 text-cyan text-xs font-mono font-bold">
+                <span>● LIVE AI STREAM</span>
+              </div>
+              {mood?.source === 'face' && mood?.confidence ? (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-mono font-bold">
+                  <span>📸 Face Verified</span>
+                  <span>•</span>
+                  <span>{Math.round(mood.confidence)}% Confidence</span>
+                </div>
+              ) : mood?.source === 'manual' ? (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan/15 border border-cyan/30 text-cyan text-xs font-mono font-bold">
+                  <span>🎯 Manually Selected Mood</span>
+                </div>
+              ) : null}
             </div>
             <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
               Tuned for Your <span className="text-cyan capitalize">{mood?.mood || activeReduxMood || 'Current'}</span> Vibe

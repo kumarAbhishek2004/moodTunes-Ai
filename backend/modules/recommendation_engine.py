@@ -21,7 +21,8 @@ class RecommendationEngine:
     
     LANGUAGE_TO_TAG = {
         'hindi': 'bollywood',
-        'english': 'pop'
+        'english': 'pop',
+        'punjabi': 'punjabi',
     }
     
     def __init__(self):
@@ -49,7 +50,16 @@ class RecommendationEngine:
         """Resilient fallback when Last.fm is down or returns empty results"""
         mood_key = (mood or 'happy').lower()
         if mood_key not in self.seeds:
-            mood_key = 'happy'
+            if mood_key in ['focus', 'calm']:
+                mood_key = 'calm'
+            elif mood_key in ['romantic']:
+                mood_key = 'calm'
+            elif mood_key in ['reflective', 'sad']:
+                mood_key = 'sad'
+            elif mood_key in ['energetic', 'intense']:
+                mood_key = 'energetic'
+            else:
+                mood_key = 'happy'
         
         lang_key = (language or 'english').lower()
         if lang_key not in ['hindi', 'english']:
@@ -508,8 +518,8 @@ class RecommendationEngine:
         
         prefs = request.preferences or {}
         language = (prefs.get('language') or '').lower()
-        if language not in ['hindi', 'english']:
-            language = 'english'
+        if language not in ['hindi', 'english', 'punjabi']:
+            language = 'hindi'
 
         if not self.lastfm:
             print(f"⚠️ Last.fm not configured. Using curated seeds for mood '{mood}'.")

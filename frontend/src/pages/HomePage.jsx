@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import Webcam from 'react-webcam';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
@@ -9,7 +10,6 @@ const MOOD_META = {
   happy: {
     name: 'Happy',
     emoji: '😊',
-    confidence: '93% Confidence',
     color: '#F59E0B',
     accent: 'from-amber-400 to-pink-500',
     description: "You seem cheerful and energetic! Here's a playlist to keep the vibe going.",
@@ -19,7 +19,6 @@ const MOOD_META = {
   calm: {
     name: 'Calm',
     emoji: '🌊',
-    confidence: '95% Confidence',
     color: '#00F2FE',
     accent: 'from-cyan to-emerald-400',
     description: "Serene acoustic textures and gentle frequencies to accompany your peaceful space.",
@@ -29,7 +28,6 @@ const MOOD_META = {
   focus: {
     name: 'Focus',
     emoji: '🧠',
-    confidence: '91% Confidence',
     color: '#10B981',
     accent: 'from-emerald-400 to-teal-500',
     description: "Distraction-free instrumentals and deep lo-fi rhythms to accelerate your flow state.",
@@ -39,7 +37,6 @@ const MOOD_META = {
   energetic: {
     name: 'Energetic',
     emoji: '⚡',
-    confidence: '96% Confidence',
     color: '#F97316',
     accent: 'from-orange-500 to-amber-400',
     description: "High BPM, punchy anthems and pulse-raising rhythms to supercharge your momentum.",
@@ -49,7 +46,6 @@ const MOOD_META = {
   romantic: {
     name: 'Romantic',
     emoji: '💖',
-    confidence: '94% Confidence',
     color: '#EC4899',
     accent: 'from-pink-500 to-rose-400',
     description: "Soulful vocal harmonies and intimate acoustic acoustics to warm the heart.",
@@ -59,12 +55,11 @@ const MOOD_META = {
   sad: {
     name: 'Reflective',
     emoji: '🌧️',
-    confidence: '89% Confidence',
     color: '#3B82F6',
     accent: 'from-blue-500 to-indigo-500',
-    description: "Gentle comfort, slow-tempo acoustics, and soothing tracks to bring a sense of calm.",
+    description: "Gentle comfort, slow-tempo acoustics, and soothing tracks to bring a sense of peace.",
     headline: 'Feeling a bit low today?',
-    subtitle: "Let's turn that around with soothing tracks to bring a sense of peace.",
+    subtitle: "Let's turn that around with soothing tracks to bring a sense of comfort.",
   },
 };
 
@@ -106,6 +101,7 @@ const PROMPT_CHIPS = [
 ];
 
 const HomePage = () => {
+  const navigate = useNavigate();
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
   const activeMoodKey = useSelector((state) => state.audio.activeMood) || 'happy';
@@ -113,13 +109,22 @@ const HomePage = () => {
   const isPlaying = useSelector((state) => state.audio.isPlaying);
 
   const [personalizedPicks, setPersonalizedPicks] = useState(DEFAULT_AURA_PICKS);
-  const [detectedConfidence, setDetectedConfidence] = useState('93% Confidence');
+
+  // Distinction between Face Detection vs Manual Selection
+  // detectionSource: 'initial' | 'face' | 'manual' | 'voice' | 'text'
+  const [detectionSource, setDetectionSource] = useState('initial');
+  // ONLY set and shown when detectionSource === 'face'
+  const [faceConfidence, setFaceConfidence] = useState(null);
+
   const [isLoading, setIsLoading] = useState(false);
+  const [cameraError, setCameraError] = useState(null);
 
   // Modals state
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const [isTypeOpen, setIsTypeOpen] = useState(false);
+
   const [sceneInput, setSceneInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
@@ -130,36 +135,30 @@ const HomePage = () => {
   const displayName = user?.full_name ? user.full_name.split(' ')[0] : 'Abhishek';
   const mood = MOOD_META[activeMoodKey.toLowerCase()] || MOOD_META.happy;
 
-  // Fetch initial personalized recommendations based on current mood
+  // Restore stored mood & confidence on mount
   useEffect(() => {
     try {
+      const storedMood = localStorage.getItem('selectedMood');
+      if (storedMood) {
+        const parsed = JSON.parse(storedMood);
+        if (parsed.source === 'face' && parsed.confidence) {
+          setDetectionSource('face');
+          setFaceConfidence(`${Math.round(parsed.confidence)}% Confidence`);
+        } else if (parsed.source === 'manual') {
+          setDetectionSource('manual');
+          setFaceConfidence(null);
+        }
+      }
+
       const stored = localStorage.getItem('aura_picks');
       if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length >= 3) {
-          setPersonalizedPicks(parsed.slice(0, 3));
-          return;
+        const parsedPicks = JSON.parse(stored);
+        if (Array.isArray(parsedPicks) && parsedPicks.length >= 3) {
+          setPersonalizedPicks(parsedPicks.slice(0, 3));
         }
       }
     } catch (e) {}
-
-    // Load from backend recommendations
-    axios
-      .post(`${API_BASE_URL}/api/recommendations`, {
-        mood: activeMoodKey,
-        limit: 6,
-        user_id: 'default',
-      })
-      .then((res) => {
-        if (res.data.recommendations?.length >= 3) {
-          setPersonalizedPicks(res.data.recommendations.slice(0, 3));
-          localStorage.setItem('aura_picks', JSON.stringify(res.data.recommendations));
-        }
-      })
-      .catch(() => {
-        // Retain DEFAULT_AURA_PICKS on error
-      });
-  }, [activeMoodKey]);
+  }, []);
 
   // Play a pick directly through global persistent audio dock
   const handlePlaySong = (song) => {
@@ -167,7 +166,88 @@ const HomePage = () => {
     dispatch(playSong(song));
   };
 
-  // Text Pipeline (NLP synthesis)
+  // ==============================================================
+  // 1. FACE DETECTION PIPELINE -> DIRECT TO RECOMMENDATION ENGINE
+  // ==============================================================
+  const handleCaptureFace = async () => {
+    if (!webcamRef.current) return;
+    setCameraError(null);
+    setIsLoading(true);
+
+    try {
+      const imageSrc = webcamRef.current.getScreenshot();
+      if (!imageSrc) {
+        throw new Error('Unable to capture webcam image');
+      }
+
+      const blob = await (await fetch(imageSrc)).blob();
+      const formData = new FormData();
+      formData.append('file', blob, 'webcam_face.jpg');
+
+      // 1. Call Backend Face Emotion Detection (DeepFace)
+      const res = await axios.post(`${API_BASE_URL}/detect-mood`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const detectedMood = (res.data.mood || 'happy').toLowerCase();
+      const rawConf = res.data.confidence;
+      const confString = rawConf !== undefined && rawConf !== null
+        ? `${Math.round(rawConf)}% Confidence`
+        : '93% Confidence';
+
+      // 2. Lock state to FACE VERIFICATION ONLY
+      setDetectionSource('face');
+      setFaceConfidence(confString);
+      dispatch(setActiveMood(detectedMood));
+
+      // Persist in localStorage with source: 'face' and confidence
+      localStorage.setItem('selectedMood', JSON.stringify({
+        mood: detectedMood,
+        confidence: rawConf,
+        source: 'face',
+        mood_distribution: res.data.mood_distribution || { [detectedMood]: 100 },
+      }));
+
+      setIsCameraOpen(false);
+
+      // DIRECTLY NAVIGATE TO PREFERENCES (Singer, Favorite Song, Language)
+      navigate('/preferences');
+    } catch (err) {
+      console.error('Face detection failed:', err);
+      setCameraError('Face detection could not verify facial expression. Ensure your face is centered and well-lit.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ==============================================================
+  // 2. MANUAL MOOD SELECTION -> DIRECT TO PREFERENCES WORKFLOW
+  // (No confidence shown - purely manual choice, follows exact same flow)
+  // ==============================================================
+  const handleSelectManualMood = (selectedMoodKey) => {
+    const cleanMood = selectedMoodKey.toLowerCase();
+
+    // 1. Set state to MANUAL (Explicitly clear face confidence!)
+    setDetectionSource('manual');
+    setFaceConfidence(null);
+    dispatch(setActiveMood(cleanMood));
+
+    // 2. Persist in localStorage with source: 'manual' (No confidence score)
+    localStorage.setItem('selectedMood', JSON.stringify({
+      mood: cleanMood,
+      source: 'manual',
+      mood_distribution: { [cleanMood]: 100 },
+    }));
+
+    setIsManualModalOpen(false);
+
+    // 3. DIRECTLY NAVIGATE TO PREFERENCES (Singer, Favorite Song, Language)
+    navigate('/preferences');
+  };
+
+  // ==============================================================
+  // 3. TEXT / SCENE PIPELINE -> DIRECT TO PREFERENCES WORKFLOW
+  // ==============================================================
   const handleTypeSubmit = async (textToRun) => {
     const text = textToRun || sceneInput;
     if (!text.trim()) return;
@@ -175,26 +255,24 @@ const HomePage = () => {
     setIsLoading(true);
     try {
       const moodRes = await axios.post(`${API_BASE_URL}/api/detect-mood-text`, { text });
-      const dMood = moodRes.data.mood || 'happy';
-      const conf = moodRes.data.confidence ? `${Math.round(moodRes.data.confidence)}% Confidence` : '94% Confidence';
+      const dMood = (moodRes.data.mood || 'happy').toLowerCase();
 
+      // Marked as text synthesis - NO face confidence shown!
+      setDetectionSource('text');
+      setFaceConfidence(null);
       dispatch(setActiveMood(dMood));
-      setDetectedConfidence(conf);
 
-      // Fetch fresh picks for this detected mood
-      const recRes = await axios.post(`${API_BASE_URL}/api/recommendations`, {
+      localStorage.setItem('selectedMood', JSON.stringify({
         mood: dMood,
+        source: 'text',
         mood_distribution: moodRes.data.mood_distribution || { [dMood]: 100 },
-        limit: 6,
-        user_id: 'default',
-      });
+      }));
 
-      if (recRes.data.recommendations?.length >= 3) {
-        setPersonalizedPicks(recRes.data.recommendations.slice(0, 3));
-        localStorage.setItem('aura_picks', JSON.stringify(recRes.data.recommendations));
-      }
       setIsTypeOpen(false);
       setSceneInput('');
+
+      // DIRECTLY NAVIGATE TO PREFERENCES (Singer, Favorite Song, Language)
+      navigate('/preferences');
     } catch (err) {
       console.error('Type mood pipeline failed:', err);
     } finally {
@@ -202,7 +280,9 @@ const HomePage = () => {
     }
   };
 
-  // Voice Pipeline (Web Speech API)
+  // ==============================================================
+  // 4. VOICE PIPELINE -> DIRECT TO RECOMMENDATION ENGINE
+  // ==============================================================
   const handleVoiceToggle = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -236,13 +316,8 @@ const HomePage = () => {
       }
     };
 
-    recognition.onerror = () => {
-      setIsRecording(false);
-    };
-
-    recognition.onend = () => {
-      setIsRecording(false);
-    };
+    recognition.onerror = () => setIsRecording(false);
+    recognition.onend = () => setIsRecording(false);
 
     recognitionRef.current = recognition;
     try {
@@ -252,53 +327,10 @@ const HomePage = () => {
     }
   };
 
-  // Camera Capture & Facial Analysis Pipeline
-  const handleCaptureFace = async () => {
-    if (!webcamRef.current) return;
-    try {
-      const imageSrc = webcamRef.current.getScreenshot();
-      if (!imageSrc) return;
-
-      setIsLoading(true);
-      const blob = await (await fetch(imageSrc)).blob();
-      const formData = new FormData();
-      formData.append('file', blob, 'webcam_face.jpg');
-
-      const res = await axios.post(`${API_BASE_URL}/detect-mood`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      const detectedMood = res.data.mood || 'happy';
-      const conf = res.data.confidence ? `${Math.round(res.data.confidence)}% Confidence` : '93% Confidence';
-
-      dispatch(setActiveMood(detectedMood));
-      setDetectedConfidence(conf);
-
-      // Fetch picks
-      const recRes = await axios.post(`${API_BASE_URL}/api/recommendations`, {
-        mood: detectedMood,
-        limit: 6,
-        user_id: 'default',
-      });
-
-      if (recRes.data.recommendations?.length >= 3) {
-        setPersonalizedPicks(recRes.data.recommendations.slice(0, 3));
-        localStorage.setItem('aura_picks', JSON.stringify(recRes.data.recommendations));
-      }
-
-      setIsCameraOpen(false);
-    } catch (err) {
-      console.error('Face detection failed:', err);
-      alert('Camera mood detection failed. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <div className="relative w-full min-h-[calc(100vh-5rem)] flex flex-col justify-between p-4 sm:p-6 lg:p-8 animate-fadeIn">
       {/* ============================================================== */}
-      {/* 1. CINEMATIC FULL-BLEED ARTWORK BACKGROUND                     */}
+      {/* CINEMATIC FULL-BLEED ARTWORK BACKGROUND                        */}
       {/* Boy with headphones on rocks gazing at cosmic dusk sunset ring */}
       {/* ============================================================== */}
       <div
@@ -308,7 +340,6 @@ const HomePage = () => {
           backgroundPosition: 'center 40%',
         }}
       >
-        {/* Soft Vignette and Cinematic Atmospheric Overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-obsidian-950 via-obsidian-950/40 to-obsidian-950/70" />
         <div className="absolute inset-0 bg-radial-vignette opacity-60" />
       </div>
@@ -316,10 +347,10 @@ const HomePage = () => {
       {/* Main Container Stage */}
       <div className="relative z-10 max-w-7xl mx-auto w-full flex-1 flex flex-col justify-between space-y-8 sm:space-y-12">
         {/* ============================================================== */}
-        {/* 2. TOP HERO ROW: Left Headline + Right Floating Emotion Card  */}
+        {/* TOP HERO ROW: Left Headline + Right Floating Emotion Card     */}
         {/* ============================================================== */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start pt-4 sm:pt-8">
-          {/* LEFT: Greeting, Headline & Tri-Modal Action Buttons */}
+          {/* LEFT: Greeting, Headline & Clean Dual Option: Face vs Manual */}
           <div className="lg:col-span-7 space-y-4 sm:space-y-6">
             <div>
               <p className="text-sm sm:text-base font-semibold text-slate-200 tracking-wide drop-shadow-md">
@@ -333,34 +364,46 @@ const HomePage = () => {
               </p>
             </div>
 
-            {/* Tri-Modal Action Buttons: Camera (Glowing Pill) + Voice + Type */}
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              {/* 📸 Detect Mood with Camera (Active Glowing Pill) */}
-              <button
-                onClick={() => setIsCameraOpen(true)}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-500 text-white font-semibold text-xs sm:text-sm shadow-[0_4px_25px_rgba(168,85,247,0.45)] hover:shadow-[0_6px_30px_rgba(168,85,247,0.65)] hover:scale-105 active:scale-95 transition-all duration-300 border border-purple-400/30"
-              >
-                <span>📸</span>
-                <span>Detect Mood with Camera</span>
-              </button>
+            {/* Clear Primary Choices: Detect Mood with Face OR Manually Select */}
+            <div className="space-y-3 pt-2">
+              <div className="flex flex-wrap items-center gap-3">
+                {/* 1. 📸 Detect Mood with Face (Primary AI Scanner) */}
+                <button
+                  onClick={() => setIsCameraOpen(true)}
+                  className="flex items-center gap-2.5 px-6 py-3 rounded-full bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-500 text-white font-bold text-xs sm:text-sm shadow-[0_4px_25px_rgba(168,85,247,0.45)] hover:shadow-[0_6px_30px_rgba(168,85,247,0.65)] hover:scale-105 active:scale-95 transition-all duration-300 border border-purple-400/40"
+                >
+                  <span className="text-base">📸</span>
+                  <span>Detect Mood with Face</span>
+                </button>
 
-              {/* 🎙️ Voice Pill */}
-              <button
-                onClick={handleVoiceToggle}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white font-medium text-xs sm:text-sm backdrop-blur-xl shadow-lg hover:scale-105 active:scale-95 transition-all duration-300"
-              >
-                <span>🎙️</span>
-                <span>Voice</span>
-              </button>
+                {/* 2. 🎛️ Manually Select Mood */}
+                <button
+                  onClick={() => setIsManualModalOpen(true)}
+                  className="flex items-center gap-2 px-5 py-3 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white font-semibold text-xs sm:text-sm backdrop-blur-xl shadow-lg hover:scale-105 active:scale-95 transition-all duration-300"
+                >
+                  <span>🎛️</span>
+                  <span>Manually Select Mood</span>
+                </button>
+              </div>
 
-              {/* ✍️ Type Pill */}
-              <button
-                onClick={() => setIsTypeOpen(true)}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white font-medium text-xs sm:text-sm backdrop-blur-xl shadow-lg hover:scale-105 active:scale-95 transition-all duration-300"
-              >
-                <span>✍️</span>
-                <span>Type</span>
-              </button>
+              {/* Supplementary Inputs (Voice & Type) */}
+              <div className="flex items-center gap-2 text-xs text-slate-400 pt-1">
+                <span className="text-[11px] text-slate-400">Or express via:</span>
+                <button
+                  onClick={handleVoiceToggle}
+                  className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all flex items-center gap-1.5"
+                >
+                  <span>🎙️</span>
+                  <span>Voice</span>
+                </button>
+                <button
+                  onClick={() => setIsTypeOpen(true)}
+                  className="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all flex items-center gap-1.5"
+                >
+                  <span>✍️</span>
+                  <span>Type</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -373,11 +416,35 @@ const HomePage = () => {
                 style={{ backgroundColor: mood.color }}
               />
 
-              <div className="relative z-10 space-y-3">
-                <span className="text-xs font-medium text-slate-400 tracking-wide uppercase font-mono">
-                  Detected Emotion
-                </span>
+              <div className="relative z-10 space-y-3.5">
+                {/* Header with Source Badge */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-400 tracking-wide uppercase font-mono">
+                    {detectionSource === 'face'
+                      ? 'Detected Emotion'
+                      : detectionSource === 'manual'
+                      ? 'Selected Emotion'
+                      : 'Current Emotion'}
+                  </span>
 
+                  {/* ONLY SHOW CONFIDENCE TO FACE VERIFICATION */}
+                  {detectionSource === 'face' && faceConfidence ? (
+                    <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1.5 shadow-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                      <span>Face Verified</span>
+                    </span>
+                  ) : detectionSource === 'manual' ? (
+                    <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-cyan/15 text-cyan border border-cyan/30 flex items-center gap-1">
+                      <span>🎯 Manual</span>
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/15">
+                      Ready for Scan
+                    </span>
+                  )}
+                </div>
+
+                {/* Mood Emoji + Name + Verification Confidence */}
                 <div className="flex items-center gap-3">
                   <span className="text-4xl sm:text-5xl drop-shadow-md select-none animate-bounce" style={{ animationDuration: '3s' }}>
                     {mood.emoji}
@@ -386,9 +453,21 @@ const HomePage = () => {
                     <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
                       {mood.name}
                     </h2>
-                    <p className="text-xs text-slate-400 font-mono">
-                      {detectedConfidence}
-                    </p>
+
+                    {/* STRICT RULE: Only show confidence percentage to face verification */}
+                    {detectionSource === 'face' && faceConfidence ? (
+                      <p className="text-xs text-purple-300 font-mono font-bold tracking-wide mt-0.5">
+                        {faceConfidence}
+                      </p>
+                    ) : detectionSource === 'manual' ? (
+                      <p className="text-xs text-slate-400 font-mono mt-0.5">
+                        Manually Chosen
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-400 font-mono mt-0.5">
+                        Default Playlist
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -396,9 +475,9 @@ const HomePage = () => {
                   {mood.description}
                 </p>
 
-                {/* Glowing Audio Waveform Line (Golden / Amber Wave) */}
-                <div className="pt-2">
-                  <svg className="w-full h-9 overflow-visible" viewBox="0 0 240 40">
+                {/* Glowing Audio Waveform Line (Amber / Golden Wave) */}
+                <div className="pt-1">
+                  <svg className="w-full h-8 overflow-visible" viewBox="0 0 240 40">
                     <defs>
                       <linearGradient id="amberWaveGlow" x1="0%" y1="0%" x2="100%" y2="0%">
                         <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.3" />
@@ -413,7 +492,6 @@ const HomePage = () => {
                       stroke="url(#amberWaveGlow)"
                       strokeWidth="3.5"
                       strokeLinecap="round"
-                      className="transition-all duration-700"
                       style={{
                         filter: 'drop-shadow(0px 0px 8px rgba(245, 158, 11, 0.7))',
                       }}
@@ -421,28 +499,16 @@ const HomePage = () => {
                   </svg>
                 </div>
 
-                {/* Quick Mood Switcher (Subtle Dots to Switch Moods) */}
-                <div className="pt-2 border-t border-white/10 flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400 font-mono">Switch Vibe:</span>
-                  <div className="flex items-center gap-1.5">
-                    {Object.entries(MOOD_META).map(([key, item]) => {
-                      const isSelected = activeMoodKey.toLowerCase() === key;
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => dispatch(setActiveMood(key))}
-                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all ${
-                            isSelected
-                              ? 'bg-white/20 border border-white/40 scale-110 shadow-sm'
-                              : 'opacity-50 hover:opacity-100 hover:scale-105'
-                          }`}
-                          title={item.name}
-                        >
-                          {item.emoji}
-                        </button>
-                      );
-                    })}
-                  </div>
+                {/* Status Footer */}
+                <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                  <span>Recommendation Engine:</span>
+                  <button
+                    onClick={() => navigate('/recommendations')}
+                    className="text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1 hover:underline"
+                  >
+                    <span>Open Full Stream</span>
+                    <span>→</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -450,12 +516,27 @@ const HomePage = () => {
         </div>
 
         {/* ============================================================== */}
-        {/* 3. BOTTOM ROW: "Your Personalized Picks" (3 Large Glass Cards) */}
+        {/* BOTTOM ROW: "Your Personalized Picks" (3 Large Glass Cards)    */}
         {/* ============================================================== */}
         <div className="space-y-4 pt-4 sm:pt-8 pb-4">
-          <h3 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2 drop-shadow">
-            <span>Your Personalized Picks</span>
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2 drop-shadow">
+              <span>Your Personalized Picks</span>
+              {detectionSource === 'face' && (
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  Curated for your facial expression
+                </span>
+              )}
+            </h3>
+
+            <button
+              onClick={() => navigate('/recommendations')}
+              className="text-xs font-semibold text-cyan hover:text-cyan/80 flex items-center gap-1 transition-colors"
+            >
+              <span>Go to Recommendation Engine</span>
+              <span>→</span>
+            </button>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
             {personalizedPicks.slice(0, 3).map((song) => {
@@ -475,7 +556,6 @@ const HomePage = () => {
                         alt={song.name}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                       />
-                      {/* Playing Indicator Overlay */}
                       {isCurrentPlaying && (
                         <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                           <div className="flex items-end gap-0.5 h-4">
@@ -518,7 +598,7 @@ const HomePage = () => {
       </div>
 
       {/* ============================================================== */}
-      {/* MODAL 1: CAMERA SCAN MODAL                                     */}
+      {/* MODAL 1: CAMERA SCAN MODAL (FACE DETECTION ONLY)               */}
       {/* ============================================================== */}
       {isCameraOpen && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-2xl flex items-center justify-center p-4 animate-fadeIn">
@@ -527,11 +607,14 @@ const HomePage = () => {
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-ping" />
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
-                  Face Emotion Scanner
+                  Face Emotion Verification
                 </h3>
               </div>
               <button
-                onClick={() => setIsCameraOpen(false)}
+                onClick={() => {
+                  setIsCameraOpen(false);
+                  setCameraError(null);
+                }}
                 className="text-slate-400 hover:text-white text-xs px-2.5 py-1 rounded-lg hover:bg-white/10"
               >
                 ✕ Close
@@ -546,30 +629,35 @@ const HomePage = () => {
                 videoConstraints={{ facingMode: 'user', width: 640, height: 480 }}
                 className="w-full h-full object-cover"
               />
-              {/* Sci-Fi Target Reticle */}
               <div className="absolute inset-0 border-2 border-purple-500/30 rounded-2xl pointer-events-none flex items-center justify-center">
                 <div className="w-36 h-36 border border-cyan/40 rounded-full animate-pulse" />
               </div>
             </div>
 
-            <p className="text-xs text-slate-400">
-              Look directly at the camera with your natural expression.
-            </p>
+            {cameraError ? (
+              <p className="text-xs text-rose-400 bg-rose-500/10 p-2.5 rounded-xl border border-rose-500/20">
+                {cameraError}
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400">
+                Center your face in the circle with natural expression. The AI will calculate your emotion and verification confidence, then direct you to personalize your singers, songs, and language.
+              </p>
+            )}
 
             <button
               onClick={handleCaptureFace}
               disabled={isLoading}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-purple-600/40 hover:scale-105 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-purple-600/40 hover:scale-105 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>
                   <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Analyzing Facial Expression...</span>
+                  <span>Verifying Face & Navigating to Preferences...</span>
                 </>
               ) : (
                 <>
                   <span>📸</span>
-                  <span>Capture & Detect Mood</span>
+                  <span>Capture & Continue</span>
                 </>
               )}
             </button>
@@ -578,7 +666,64 @@ const HomePage = () => {
       )}
 
       {/* ============================================================== */}
-      {/* MODAL 2: VOICE LISTENER MODAL                                  */}
+      {/* MODAL 2: MANUAL MOOD SELECTION MODAL                           */}
+      {/* ============================================================== */}
+      {isManualModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-2xl flex items-center justify-center p-4 animate-fadeIn">
+          <div className="relative w-full max-w-lg rounded-3xl bg-obsidian-900 border border-white/15 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan" />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                  Manually Select Your Mood
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsManualModalOpen(false)}
+                className="text-slate-400 hover:text-white text-xs px-2.5 py-1 rounded-lg hover:bg-white/10"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Pick your current vibe. You can then specify your favorite singers, songs, and language:
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {Object.entries(MOOD_META).map(([key, item]) => {
+                const isSelected = activeMoodKey.toLowerCase() === key && detectionSource === 'manual';
+
+                return (
+                  <button
+                    key={key}
+                    onClick={() => handleSelectManualMood(key)}
+                    className={`flex items-start gap-3 p-3.5 rounded-2xl border text-left transition-all ${
+                      isSelected
+                        ? 'bg-purple-600/20 border-purple-500 shadow-lg'
+                        : 'bg-obsidian-950/70 hover:bg-white/10 border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <span className="text-2xl flex-shrink-0 mt-0.5">{item.emoji}</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-white flex items-center gap-2">
+                        <span>{item.name}</span>
+                        {isSelected && <span className="text-[10px] text-purple-400 font-mono">● Active</span>}
+                      </p>
+                      <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">
+                        {item.description}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL 3: VOICE LISTENER MODAL                                  */}
       {/* ============================================================== */}
       {isVoiceOpen && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-2xl flex items-center justify-center p-4 animate-fadeIn">
@@ -602,7 +747,6 @@ const HomePage = () => {
               </button>
             </div>
 
-            {/* Glowing Microphone Visualizer */}
             <div className="py-6 flex flex-col items-center justify-center">
               <div className="relative w-20 h-20 rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center animate-pulse">
                 <span className="text-3xl">🎙️</span>
@@ -610,10 +754,10 @@ const HomePage = () => {
               </div>
 
               <p className="text-sm font-semibold text-white mt-4">
-                Listening to your tone and words...
+                Listening to your voice...
               </p>
               <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                Speak freely (e.g. &quot;I had a hectic work day, I want peaceful acoustic tunes&quot;)
+                Speak freely (e.g. &quot;I need calming acoustic tunes after a long day&quot;)
               </p>
             </div>
 
@@ -634,14 +778,14 @@ const HomePage = () => {
               }}
               className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition-colors"
             >
-              Stop & Curate
+              Stop & Go to Recommendations
             </button>
           </div>
         </div>
       )}
 
       {/* ============================================================== */}
-      {/* MODAL 3: TYPE SCENE MODAL                                      */}
+      {/* MODAL 4: TYPE SCENE MODAL                                      */}
       {/* ============================================================== */}
       {isTypeOpen && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-2xl flex items-center justify-center p-4 animate-fadeIn">
@@ -680,7 +824,6 @@ const HomePage = () => {
                 className="w-full bg-obsidian-950/90 text-white text-xs sm:text-sm p-3.5 rounded-xl border border-white/15 focus:outline-none focus:border-purple-500 transition-all placeholder:text-slate-500 resize-none shadow-inner"
               />
 
-              {/* Preset Chips */}
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {PROMPT_CHIPS.map((chip) => (
                   <button
@@ -706,10 +849,10 @@ const HomePage = () => {
                   {isLoading ? (
                     <>
                       <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Synthesizing Mood & Recommendations...</span>
+                      <span>Synthesizing Mood & Curating Recommendations...</span>
                     </>
                   ) : (
-                    <span>Curate My Soundtrack</span>
+                    <span>Curate & Go to Recommendations</span>
                   )}
                 </button>
               </div>
