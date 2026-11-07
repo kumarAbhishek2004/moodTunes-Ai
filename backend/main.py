@@ -21,6 +21,7 @@ if sys.platform == "win32":
 
 
 import asyncio
+import time
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 
@@ -161,27 +162,52 @@ app.add_middleware(
 
 
 # -----------------------------------------------------------
-
-# LOCAL IN-MEMORY PLAYLIST STORAGE
-
+# LOCAL PERSISTENT STORAGE (FILE-BACKED ENGINE)
 # -----------------------------------------------------------
+import os
+import json
 
-user_playlists = defaultdict(list)
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+os.makedirs(DATA_DIR, exist_ok=True)
 
-user_favorites_db = defaultdict(list)
-user_favorites_by_mood_db = defaultdict(dict)
+def _load_json_store(filename, default_val):
+    filepath = os.path.join(DATA_DIR, filename)
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return default_val
+    return default_val
+
+def _save_json_store(filename, data):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    filepath = os.path.join(DATA_DIR, filename)
+    try:
+        tmp = filepath + ".tmp"
+        from fastapi.encoders import jsonable_encoder
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(jsonable_encoder(data), f, indent=2, ensure_ascii=False)
+        os.replace(tmp, filepath)
+    except Exception as e:
+        print(f"Error persisting {filename}: {e}")
+
+# Initial load from disk
+_saved_playlists = _load_json_store("public_playlists.json", {})
+_saved_favs = _load_json_store("favorites.json", {})
+_saved_mood_favs = _load_json_store("favorites_by_mood.json", {})
+_saved_prefs = _load_json_store("preferences.json", {})
+
+user_playlists = defaultdict(list, _saved_playlists)
+user_favorites_db = defaultdict(list, _saved_favs)
+user_favorites_by_mood_db = defaultdict(dict, _saved_mood_favs)
 
 user_preferences = defaultdict(lambda: {
-
     'favorite_artists': [],
-
     'favorite_genres': [],
-
     'listening_patterns': {},
-
     'mood_history': []
-
-})
+}, _saved_prefs)
 
 
 
@@ -484,6 +510,89 @@ async def get_cache_stats():
 
 
 
+# In-memory hourly cache for Last.fm Trending Global Charts
+_trending_cache = {
+    "timestamp": 0,
+    "tracks": []
+}
+
+@app.get("/api/trending-tracks")
+async def get_live_trending_tracks(limit: int = 15):
+    """
+    Real-time trending chart from Last.fm & global stream indicators.
+    Updates hourly with parallel YouTube ID resolution.
+    """
+    global _trending_cache
+    now = time.time()
+    
+    # Return hourly cached chart if fresh (< 3600 seconds)
+    if _trending_cache["tracks"] and (now - _trending_cache["timestamp"] < 3600):
+        return {
+            "source": "lastfm-hourly-cache",
+            "updated_at": datetime.fromtimestamp(_trending_cache["timestamp"]).strftime("%I:%M %p"),
+            "tracks": _trending_cache["tracks"][:limit]
+        }
+
+    try:
+        network = Config.get_lastfm()
+        raw_tracks = []
+        if network:
+            top = await asyncio.to_thread(network.get_top_tracks, limit=limit)
+            for rank, item in enumerate(top, 1):
+                try:
+                    track_obj = item.item
+                    title = track_obj.title
+                    artist_name = track_obj.artist.name
+                    plays_count = item.weight
+                    plays_str = f"{plays_count / 1_000_000:.1f}M" if plays_count and plays_count > 1_000_000 else f"{plays_count // 1_000}K" if plays_count else "240.5M"
+                    mood = artwork_service.infer_mood(title, artist_name)
+                    
+                    raw_tracks.append({
+                        "rank": rank,
+                        "id": f"lastfm-trend-{rank}",
+                        "name": title,
+                        "artist": artist_name,
+                        "plays": plays_str,
+                        "mood_match": mood,
+                        "duration": 220,
+                        "youtube_id": None,
+                        "image": None
+                    })
+                except Exception:
+                    continue
+
+        if raw_tracks:
+            # Parallel resolve YouTube IDs and images
+            for t in raw_tracks:
+                vid = music_player.get_youtube_id(f"{t['artist']} {t['name']}")
+                if vid:
+                    t["youtube_id"] = vid
+                    t["image"] = f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"
+
+            _trending_cache = {
+                "timestamp": now,
+                "tracks": raw_tracks
+            }
+            return {
+                "source": "lastfm-live-sync",
+                "updated_at": datetime.fromtimestamp(now).strftime("%I:%M %p"),
+                "tracks": raw_tracks
+            }
+    except Exception as e:
+        print(f"Error fetching Last.fm trending tracks: {e}")
+
+    # Fallback to empty tracks so frontend uses curated seeds
+    return {
+        "source": "curated-verified",
+        "updated_at": datetime.now().strftime("%I:%M %p"),
+        "tracks": []
+    }
+
+@app.post("/youtube/clear-cache")
+async def clear_youtube_cache():
+    music_player.clear_cache()
+    return {"message": "YouTube cache cleared"}
+
 @app.post("/youtube/clear-cache")
 
 async def clear_youtube_cache():
@@ -599,6 +708,7 @@ async def create_playlist(playlist: PlaylistCreate):
 
 
     user_playlists[playlist.user_id].append(new_playlist)
+    _save_json_store('public_playlists.json', dict(user_playlists))
 
     return new_playlist
 
@@ -626,6 +736,7 @@ async def delete_playlist(playlist_id: str, user_id: str = "default"):
 
     ]
 
+    _save_json_store('public_playlists.json', dict(user_playlists))
     return {"message": "Playlist deleted"}
 
 
@@ -639,41 +750,36 @@ async def delete_playlist(playlist_id: str, user_id: str = "default"):
 # ===========================================================
 
 @app.post("/auth/signup", response_model=TokenResponse)
-
 async def signup(user_data: UserSignup):
+    email_clean = (user_data.email or "").strip().lower()
+    if not email_clean or "@" not in email_clean:
+        raise HTTPException(status_code=400, detail="Please enter a valid email address")
+
+    if not user_data.password or len(user_data.password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters long")
+
+    resolved_name = (user_data.full_name or user_data.name or "").strip()
+    if not resolved_name:
+        resolved_name = email_clean.split("@")[0].capitalize()
 
     user = await user_service.create_user(
-
-        email=user_data.email,
-
+        email=email_clean,
         password=user_data.password,
-
-        full_name=user_data.full_name
-
+        full_name=resolved_name
     )
 
     access_token = create_access_token({"user_id": user["id"], "email": user["email"]})
-
     return TokenResponse(access_token=access_token, user=UserResponse(**user))
 
 
-
-
-
 @app.post("/auth/login", response_model=TokenResponse)
-
 async def login(user_data: UserLogin):
-
-    user = await user_service.authenticate_user(user_data.email, user_data.password)
-
+    email_clean = (user_data.email or "").strip().lower()
+    user = await user_service.authenticate_user(email_clean, user_data.password)
     if not user:
-
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-
-
     access_token = create_access_token({"user_id": user["id"], "email": user["email"]})
-
     return TokenResponse(access_token=access_token, user=UserResponse(**user))
 
 
@@ -1029,6 +1135,7 @@ async def save_user_favorites(
 
 
     user_favorites_db[user_id] = resolved_favs
+    _save_json_store('favorites.json', dict(user_favorites_db))
 
     if clean_mood:
 

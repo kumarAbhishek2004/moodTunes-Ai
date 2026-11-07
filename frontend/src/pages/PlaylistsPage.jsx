@@ -4,8 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 import { logout } from '../store/authSlice';
-import { playSong, setQueue, setPlaying, setActiveMood } from '../store/audioSlice';
+import { playSong, setQueue, setPlaying, setActiveMood, addToPlayNext, addToQueue, moveQueueItem, openQueue, shuffleUpcomingQueue } from '../store/audioSlice';
 import CreatePlaylistModal from '../components/CreatePlaylistModal';
+import { getUserPlaylistSongs, saveUserPlaylistSongs, getUserCustomPlaylists, saveUserCustomPlaylists } from '../utils/userStorage';
+import { resolveTrackArtwork, handleArtworkError } from '../utils/imageHelper';
 
 // ============================================================================
 // MOOD THEMES & DYNAMIC COLOR GRADING CONFIG
@@ -193,27 +195,20 @@ const calculateTotalDuration = (songs) => {
   return `${hrs} hr ${mins} min`;
 };
 
-// Load playlist songs from localStorage (where user added them)
-const getStoredSongs = (playlistId) => {
-  try {
-    const raw = localStorage.getItem(`playlist_user_songs_${playlistId}`);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch (e) {}
-  return [];
+// User-isolated playlist song loader & saver
+const getStoredSongs = (playlistId, user) => {
+  return getUserPlaylistSongs(playlistId, user);
 };
 
-const saveStoredSongs = (playlistId, songs) => {
-  try {
-    localStorage.setItem(`playlist_user_songs_${playlistId}`, JSON.stringify(songs));
-  } catch (e) {}
+const saveStoredSongs = (playlistId, songs, user) => {
+  saveUserPlaylistSongs(playlistId, songs, user);
 };
 
 const PlaylistsPage = () => {
-  const [userPlaylists, setUserPlaylists] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { isAuthenticated, user } = useSelector((state) => state.auth);
+  const [userPlaylists, setUserPlaylists] = useState(() => getUserCustomPlaylists(user));
+  const [loading, setLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [activeMoodFilter, setActiveMoodFilter] = useState('calm');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPlaylistId, setSelectedPlaylistId] = useState('starter-calm-and-relax');
@@ -224,11 +219,20 @@ const PlaylistsPage = () => {
   const [isSearchingRemote, setIsSearchingRemote] = useState(false);
   const [mobileDetailView, setMobileDetailView] = useState(false);
   const [localSongsMap, setLocalSongsMap] = useState({});
+  const [toastMsg, setToastMsg] = useState(null);
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [dropPosition, setDropPosition] = useState(null); // 'before' | 'after'
 
-  const { isAuthenticated } = useSelector((state) => state.auth);
   const currentSong = useSelector((state) => state.audio?.currentSong);
   const isPlaying = useSelector((state) => state.audio?.isPlaying);
   const reduxActiveMood = useSelector((state) => state.audio?.activeMood);
+  const { queue = [], currentIndex = 0 } = useSelector((state) => state.audio || {});
+
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 2500);
+  };
   
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -236,7 +240,7 @@ const PlaylistsPage = () => {
   // Load starter playlists and attach any user-added songs from localStorage
   const starterWithUserSongs = useMemo(() => {
     return STARTER_MOOD_PLAYLISTS.map((p) => {
-      const userAdded = localSongsMap[p.id] || getStoredSongs(p.id);
+      const userAdded = localSongsMap[p.id] || getStoredSongs(p.id, user);
       return {
         ...p,
         songs: userAdded,
@@ -249,7 +253,7 @@ const PlaylistsPage = () => {
     const formattedUser = (userPlaylists || []).map((p) => {
       const moodKey = String(p.mood || 'calm').toLowerCase();
       const cfg = PLAYLIST_MOOD_CONFIG[moodKey] || PLAYLIST_MOOD_CONFIG.calm;
-      const userAdded = localSongsMap[p.id || p._id] || p.songs || getStoredSongs(p.id || p._id);
+      const userAdded = localSongsMap[p.id || p._id] || (p.songs && p.songs.length > 0 ? p.songs : getStoredSongs(p.id || p._id, user));
       return {
         id: p.id || p._id,
         name: p.name || 'Untitled Playlist',
@@ -292,8 +296,12 @@ const PlaylistsPage = () => {
       navigate('/login');
       return;
     }
+    if (user?.isGuest) {
+      setLoading(false);
+      return;
+    }
     fetchPlaylists();
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, user?.isGuest, navigate]);
 
   // Keep Redux active mood synchronized when activeMoodKey changes
   const applyMoodGradingToWholeApp = (moodKey) => {
@@ -312,22 +320,24 @@ const PlaylistsPage = () => {
 
   const fetchPlaylists = async () => {
     try {
-      setLoading(true);
+      setIsSyncing(true);
       const token = localStorage.getItem('token');
-      if (!token) {
-        handleAuthError();
+      if (!token || user?.isGuest) {
+        setIsSyncing(false);
         return;
       }
       const response = await axios.get(`${API_BASE_URL}/api/playlists`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 3000,
       });
-      setUserPlaylists(response.data || []);
-    } catch (error) {
-      console.warn('Error fetching backend playlists:', error);
-      if (error.response?.status === 401) {
-        handleAuthError();
+      if (response.data && Array.isArray(response.data)) {
+        setUserPlaylists(response.data);
+        saveUserCustomPlaylists(response.data, user);
       }
+    } catch (error) {
+      console.warn('Backend playlists sync note (local playlists intact):', error?.message);
     } finally {
+      setIsSyncing(false);
       setLoading(false);
     }
   };
@@ -380,7 +390,9 @@ const PlaylistsPage = () => {
         created_at: new Date().toISOString(),
       };
 
-      setUserPlaylists((prev) => [newPlaylist, ...prev]);
+      const updated = [newPlaylist, ...userPlaylists];
+      setUserPlaylists(updated);
+      saveUserCustomPlaylists(updated, user);
       setIsCreateModalOpen(false);
       setSelectedPlaylistId(createdId);
       setActiveMoodFilter(playlistData.mood || 'calm');
@@ -408,7 +420,9 @@ const PlaylistsPage = () => {
     } catch (e) {
       console.warn('API delete error, deleting locally:', e);
     }
-    setUserPlaylists((prev) => prev.filter((p) => (p.id || p._id) !== playlistId));
+    const updated = userPlaylists.filter((p) => (p.id || p._id) !== playlistId);
+    setUserPlaylists(updated);
+    saveUserCustomPlaylists(updated, user);
     setSelectedPlaylistId(STARTER_MOOD_PLAYLISTS[0].id);
   };
 
@@ -452,6 +466,120 @@ const PlaylistsPage = () => {
     if (playlist.mood) {
       applyMoodGradingToWholeApp(playlist.mood);
     }
+  };
+
+  // Check if active playlist is currently playing in the active queue
+  const isPlaylistActiveInQueue = useMemo(() => {
+    if (!queue || queue.length === 0 || !activePlaylist?.songs?.length) return false;
+    return activePlaylist.songs.some(
+      (s) => s.name === currentSong?.name && s.artist === currentSong?.artist
+    );
+  }, [queue, activePlaylist, currentSong]);
+
+  const upcomingNextSong = useMemo(() => {
+    if (!queue || queue.length <= 1 || currentIndex === undefined) return null;
+    return queue[currentIndex + 1] || null;
+  }, [queue, currentIndex]);
+
+  // Drag and Drop reordering handlers
+  const handleDragStart = (e, index) => {
+    e.dataTransfer.setData('text/plain', String(index));
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e, targetIdx) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedIndex === null || draggedIndex === targetIdx) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const pos = e.clientY < midY ? 'before' : 'after';
+    setDragOverIndex(targetIdx);
+    setDropPosition(pos);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+    setDropPosition(null);
+  };
+
+  const handleDropTrack = (e, targetIdx) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === targetIdx) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      setDropPosition(null);
+      return;
+    }
+
+    let destIdx = targetIdx;
+    if (dropPosition === 'after' && draggedIndex < targetIdx) {
+      destIdx = targetIdx;
+    } else if (dropPosition === 'before' && draggedIndex > targetIdx) {
+      destIdx = targetIdx;
+    } else if (dropPosition === 'after' && draggedIndex > targetIdx) {
+      destIdx = targetIdx + 1;
+    } else if (dropPosition === 'before' && draggedIndex < targetIdx) {
+      destIdx = targetIdx - 1;
+    }
+
+    destIdx = Math.max(0, Math.min(activePlaylist.songs.length - 1, destIdx));
+
+    if (destIdx !== draggedIndex) {
+      const updatedSongs = [...activePlaylist.songs];
+      const [movedSong] = updatedSongs.splice(draggedIndex, 1);
+      updatedSongs.splice(destIdx, 0, movedSong);
+
+      saveStoredSongs(activePlaylist.id, updatedSongs, user);
+      setLocalSongsMap((prev) => ({
+        ...prev,
+        [activePlaylist.id]: updatedSongs,
+      }));
+
+      // Synchronize live playback queue if this playlist is active
+      if (isPlaylistActiveInQueue) {
+        dispatch(setQueue(updatedSongs));
+      }
+      showToast(`✨ Reordered: "${movedSong.name}" moved to #${destIdx + 1}`);
+    }
+
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+    setDropPosition(null);
+  };
+
+  const handleMoveSong = (fromIdx, direction, e) => {
+    e.stopPropagation();
+    const toIdx = direction === 'up' ? fromIdx - 1 : fromIdx + 1;
+    if (!activePlaylist?.songs || toIdx < 0 || toIdx >= activePlaylist.songs.length) return;
+
+    const updatedSongs = [...activePlaylist.songs];
+    const [movedSong] = updatedSongs.splice(fromIdx, 1);
+    updatedSongs.splice(toIdx, 0, movedSong);
+
+    saveStoredSongs(activePlaylist.id, updatedSongs, user);
+    setLocalSongsMap((prev) => ({
+      ...prev,
+      [activePlaylist.id]: updatedSongs,
+    }));
+
+    if (isPlaylistActiveInQueue) {
+      dispatch(setQueue(updatedSongs));
+    }
+    showToast(`✨ Moved "${movedSong.name}" to #${toIdx + 1}`);
+  };
+
+  const handlePlayNextInQueue = (track, e) => {
+    e.stopPropagation();
+    dispatch(addToPlayNext(track));
+    showToast(`⚡ "${track.name}" will play next in queue!`);
+  };
+
+  const handleAddToUpcomingQueue = (track, e) => {
+    e.stopPropagation();
+    dispatch(addToQueue(track));
+    showToast(`+ Added "${track.name}" to upcoming queue`);
   };
 
   // Add a song into the active playlist (Users add their own songs)
@@ -568,13 +696,80 @@ const PlaylistsPage = () => {
     return POPULAR_SEARCH_CATALOG;
   }, [addSongSearch, remoteSearchResults]);
 
+
+  if (user?.isGuest) {
+    return (
+      <div
+        className="min-h-screen text-slate-100 flex flex-col items-center justify-center p-6 relative font-sans"
+        style={{
+          background: `radial-gradient(ellipse at 50% 0%, rgba(${moodTheme.accentRgb}, 0.20) 0%, transparent 70%), #060B10`,
+        }}
+      >
+        <div className="max-w-md w-full bg-slate-900/80 border border-white/10 rounded-3xl p-8 sm:p-10 text-center backdrop-blur-2xl shadow-2xl relative overflow-hidden">
+          <div
+            className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center text-3xl mb-5 border shadow-lg"
+            style={{
+              backgroundColor: `rgba(${moodTheme.accentRgb}, 0.15)`,
+              borderColor: `rgba(${moodTheme.accentRgb}, 0.35)`,
+              boxShadow: `0 0 24px rgba(${moodTheme.accentRgb}, 0.3)`,
+            }}
+          >
+            🔒
+          </div>
+          <span
+            className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border inline-block mb-3"
+            style={{
+              backgroundColor: `rgba(${moodTheme.accentRgb}, 0.1)`,
+              color: moodTheme.accent,
+              borderColor: `rgba(${moodTheme.accentRgb}, 0.3)`,
+            }}
+          >
+            Member Exclusive Feature
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-2.5">
+            Playlist Library Locked
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-6">
+            You are currently browsing as a <strong>Guest Listener</strong>. Creating, managing, and saving personal mood playlists requires a free MoodTunes AI account.
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => navigate('/login')}
+              className="w-full py-3 px-4 rounded-full font-bold text-xs sm:text-sm text-white shadow-lg hover:scale-[1.02] active:scale-98 transition-all cursor-pointer"
+              style={{
+                background: 'linear-gradient(135deg, #EC4899 0%, #8B5CF6 50%, #6366F1 100%)',
+                boxShadow: '0 8px 24px -4px rgba(236, 72, 153, 0.4)',
+              }}
+            >
+              Log In or Create Account
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className="w-full py-2.5 px-4 rounded-full font-semibold text-xs sm:text-sm text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer"
+            >
+              Back to Discover & Music
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="min-h-screen text-slate-100 transition-colors duration-1000 relative pb-32"
+
       style={{
         background: `radial-gradient(ellipse at 50% -10%, rgba(${moodTheme.accentRgb}, 0.24) 0%, transparent 70%), #060B10`,
       }}
     >
+      {/* Action feedback toast */}
+      {toastMsg && (
+        <div className="fixed bottom-24 right-8 z-50 px-4 py-2.5 rounded-2xl bg-slate-950/95 border border-white/20 text-xs font-bold text-cyan shadow-2xl backdrop-blur-2xl animate-fadeIn flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-cyan animate-pulse" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
       {/* Dynamic Ambient Mesh for Mood Grading */}
       <div
         aria-hidden="true"
@@ -676,14 +871,7 @@ const PlaylistsPage = () => {
               </svg>
             </div>
 
-            {loading ? (
-              <div className="flex justify-center items-center py-20">
-                <div
-                  className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2"
-                  style={{ borderColor: moodTheme.accent }}
-                />
-              </div>
-            ) : filteredPlaylists.length === 0 ? (
+            {filteredPlaylists.length === 0 ? (
               <div className="text-center py-16 bg-slate-900/40 rounded-3xl border border-white/5 p-6">
                 <span className="text-4xl select-none">📂</span>
                 <h3 className="text-base font-semibold text-slate-300 mt-3">No Playlists Found</h3>
@@ -911,6 +1099,21 @@ const PlaylistsPage = () => {
                       <span>Add Songs</span>
                     </button>
 
+                    {/* Adjust Queue Button */}
+                    <button
+                      onClick={() => dispatch(openQueue())}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer active:scale-95 shadow-md border"
+                      style={{
+                        backgroundColor: isPlaylistActiveInQueue ? 'rgba(0, 242, 254, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                        borderColor: isPlaylistActiveInQueue ? 'rgba(0, 242, 254, 0.45)' : 'rgba(255, 255, 255, 0.15)',
+                        color: isPlaylistActiveInQueue ? '#00F2FE' : '#FFFFFF',
+                      }}
+                      title="Open Queue Drawer to customize upcoming tracks"
+                    >
+                      <span className={isPlaylistActiveInQueue ? 'animate-pulse' : ''}>🎛️</span>
+                      <span>{isPlaylistActiveInQueue ? 'Adjust Live Queue' : 'Queue Drawer'}</span>
+                    </button>
+
                     {/* Delete Playlist (for custom user playlists) */}
                     {activePlaylist?.isCustom && (
                       <button
@@ -928,15 +1131,62 @@ const PlaylistsPage = () => {
               </div>
             </div>
 
+            {/* Active Queue Control & Status Banner */}
+            {isPlaylistActiveInQueue && (
+              <div className="mb-4 p-4 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900/80 to-cyan-950/40 border border-emerald-500/30 backdrop-blur-xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider">
+                        ● Active In Playing Queue
+                      </span>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300 font-mono">
+                        Track {currentIndex + 1} of {queue.length}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-0.5">
+                      {upcomingNextSong ? (
+                        <span>Up Next: <strong className="text-white">{upcomingNextSong.name}</strong> • {upcomingNextSong.artist}</span>
+                      ) : (
+                        <span>End of queue reached. Drag tracks or click <strong>⚡ Next</strong> to schedule more!</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => dispatch(openQueue())}
+                    className="px-3.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan border border-cyan/30 text-xs font-bold transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <span>🎛️ Adjust Full Queue</span>
+                    <span>→</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      dispatch(shuffleUpcomingQueue());
+                      showToast('🔀 Upcoming queue shuffled!');
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-xs font-semibold transition-all cursor-pointer"
+                    title="Shuffle upcoming queue"
+                  >
+                    🔀 Shuffle Next
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Tracklist Table */}
             <div className="bg-slate-950/60 backdrop-blur-xl rounded-3xl border border-white/10 overflow-hidden shadow-xl">
               
-              {/* Table Column Headers */}
-              <div className="grid grid-cols-12 px-5 py-3 text-xs font-mono uppercase tracking-wider text-slate-400 border-b border-white/5 bg-slate-900/40">
-                <div className="col-span-1 text-center">#</div>
-                <div className="col-span-6 sm:col-span-5">Title</div>
-                <div className="col-span-3 sm:col-span-4">Artist</div>
-                <div className="col-span-2 text-right pr-2">Duration</div>
+              {/* Table Column Headers (12 Columns: 1 + 4 + 3 + 1 + 3) */}
+              <div className="grid grid-cols-12 px-4 sm:px-5 py-3 text-xs font-mono uppercase tracking-wider text-slate-400 border-b border-white/5 bg-slate-900/40 items-center">
+                <div className="col-span-1 text-center"># / Drag</div>
+                <div className="col-span-5 sm:col-span-4">Title</div>
+                <div className="col-span-3 sm:col-span-3">Artist</div>
+                <div className="col-span-1 hidden md:block text-center">Time</div>
+                <div className="col-span-3 sm:col-span-4 text-right pr-2">Queue & Actions</div>
               </div>
 
               {/* Empty Playlist State (User will add songs themselves!) */}
@@ -969,83 +1219,151 @@ const PlaylistsPage = () => {
               ) : (
                 <div className="divide-y divide-white/5">
                   {activePlaylist.songs.map((track, idx) => {
-                    const isTrackPlaying = isPlaying && currentSong?.name === track.name;
+                    const isTrackPlaying = isPlaying && currentSong?.name === track.name && currentSong?.artist === track.artist;
+                    const isNextUp = upcomingNextSong && upcomingNextSong.name === track.name && upcomingNextSong.artist === track.artist;
+                    const isDragOver = dragOverIndex === idx;
 
                     return (
                       <div
                         key={track.id || `${track.name}-${idx}`}
-                        className={`group grid grid-cols-12 items-center px-5 py-3 transition-colors ${
-                          isTrackPlaying ? 'bg-white/10' : 'hover:bg-white/5'
+                        draggable={true}
+                        onDragStart={(e) => handleDragStart(e, idx)}
+                        onDragOver={(e) => handleDragOver(e, idx)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDropTrack(e, idx)}
+                        className={`group grid grid-cols-12 items-center px-4 sm:px-5 py-2.5 transition-all border-y ${
+                          isTrackPlaying
+                            ? 'bg-cyan-500/10 border-cyan/30 shadow-md'
+                            : isDragOver
+                            ? dropPosition === 'before'
+                              ? 'border-t-2 border-cyan bg-cyan/15 border-b-transparent'
+                              : 'border-b-2 border-cyan bg-cyan/15 border-t-transparent'
+                            : 'border-transparent hover:bg-white/5'
                         }`}
                       >
-                        {/* Column 1: Index or Equalizer */}
-                        <div
-                          onClick={() => handlePlayTrack(track, idx)}
-                          className="col-span-1 flex items-center justify-center text-xs font-mono text-slate-400 cursor-pointer"
-                        >
+                        {/* Column 1: Drag Handle (⠿) & Index / Audio Wave */}
+                        <div className="col-span-1 flex items-center justify-center gap-1.5 text-xs font-mono text-slate-400">
+                          {/* 6-Dot Drag Handle */}
+                          <div
+                            className="cursor-grab active:cursor-grabbing p-1 text-slate-500 hover:text-white transition-colors flex items-center justify-center select-none"
+                            title="Drag up or down to reorder in playlist & queue"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <svg className="w-3.5 h-3.5 fill-current opacity-60 group-hover:opacity-100" viewBox="0 0 24 24">
+                              <circle cx="8.5" cy="6" r="1.5" />
+                              <circle cx="15.5" cy="6" r="1.5" />
+                              <circle cx="8.5" cy="12" r="1.5" />
+                              <circle cx="15.5" cy="12" r="1.5" />
+                              <circle cx="8.5" cy="18" r="1.5" />
+                              <circle cx="15.5" cy="18" r="1.5" />
+                            </svg>
+                          </div>
+
                           {isTrackPlaying ? (
-                            <div className="flex items-end gap-0.5 h-3.5">
-                              <span className="w-1 rounded-full animate-pulse h-full" style={{ backgroundColor: moodTheme.accent }} />
-                              <span className="w-1 rounded-full animate-pulse h-2/3" style={{ backgroundColor: moodTheme.accent }} />
-                              <span className="w-1 rounded-full animate-pulse h-4/5" style={{ backgroundColor: moodTheme.accent }} />
+                            <div className="flex items-end gap-[2px] h-3.5" title="Playing Now">
+                              <span className="w-[3px] h-3 rounded-full animate-bounce [animation-delay:-0.3s]" style={{ backgroundColor: moodTheme.accent }} />
+                              <span className="w-[3px] h-3.5 rounded-full animate-bounce [animation-delay:-0.15s]" style={{ backgroundColor: moodTheme.accent }} />
+                              <span className="w-[3px] h-2 rounded-full animate-bounce" style={{ backgroundColor: moodTheme.accent }} />
                             </div>
                           ) : (
-                            <span className="group-hover:hidden">{idx + 1}</span>
-                          )}
-                          {!isTrackPlaying && (
-                            <svg className="w-3.5 h-3.5 hidden group-hover:block text-white" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
+                            <span className="font-mono text-slate-400 text-xs">{idx + 1}</span>
                           )}
                         </div>
 
-                        {/* Column 2: Song Name & Artwork */}
+                        {/* Column 2: Artwork & Title */}
                         <div
                           onClick={() => handlePlayTrack(track, idx)}
-                          className="col-span-6 sm:col-span-5 flex items-center gap-3 min-w-0 pr-2 cursor-pointer"
+                          className="col-span-5 sm:col-span-4 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2 cursor-pointer"
                         >
-                          {track.image && (
-                            <img
-                              src={track.image}
-                              alt={track.name}
-                              className="w-9 h-9 rounded-lg object-cover shrink-0 shadow-sm"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                              }}
-                            />
-                          )}
+                          <img
+                            src={resolveTrackArtwork(track)}
+                            alt={track.name}
+                            className="w-10 h-10 rounded-lg object-cover shrink-0 shadow-sm bg-slate-800"
+                            onError={(e) => handleArtworkError(e, track)}
+                          />
                           <div className="min-w-0">
                             <p className={`text-xs sm:text-sm font-semibold truncate ${
-                              isTrackPlaying ? 'text-white' : 'text-slate-200 group-hover:text-white'
+                              isTrackPlaying ? 'text-cyan font-bold' : 'text-slate-200 group-hover:text-white'
                             }`}>
                               {track.name}
                             </p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {isTrackPlaying && (
+                                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan/20 text-cyan font-bold">
+                                  PLAYING
+                                </span>
+                              )}
+                              {isNextUp && !isTrackPlaying && (
+                                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold">
+                                  UP NEXT ⚡
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
                         {/* Column 3: Artist */}
                         <div
                           onClick={() => handlePlayTrack(track, idx)}
-                          className="col-span-3 sm:col-span-4 min-w-0 cursor-pointer"
+                          className="col-span-3 sm:col-span-3 min-w-0 cursor-pointer"
                         >
                           <p className="text-xs text-slate-400 group-hover:text-slate-300 truncate">
                             {track.artist}
                           </p>
                         </div>
 
-                        {/* Column 4: Duration & Actions */}
-                        <div className="col-span-2 flex items-center justify-end gap-2 text-right">
-                          <span className="text-xs font-mono text-slate-400">
-                            {formatSongDuration(track.duration)}
-                          </span>
+                        {/* Column 4: Duration */}
+                        <div className="col-span-1 hidden md:block text-center font-mono text-xs text-slate-400">
+                          {formatSongDuration(track.duration)}
+                        </div>
 
-                          {/* YouTube Stream Badge Icon */}
+                        {/* Column 5: Queue Adjustments & Actions */}
+                        <div className="col-span-3 sm:col-span-4 flex items-center justify-end gap-1.5 text-right flex-shrink-0">
+                          {/* Play Next in Queue Button */}
+                          <button
+                            onClick={(e) => handlePlayNextInQueue(track, e)}
+                            className="px-2 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] sm:text-[11px] font-mono font-bold transition-all hover:scale-105 whitespace-nowrap cursor-pointer shadow-sm"
+                            title="Make this song play next in queue"
+                          >
+                            ⚡ Next
+                          </button>
+
+                          {/* Add to Queue Button */}
+                          <button
+                            onClick={(e) => handleAddToUpcomingQueue(track, e)}
+                            className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-[10px] sm:text-[11px] font-mono font-bold transition-all hover:scale-105 whitespace-nowrap cursor-pointer hidden sm:inline-flex"
+                            title="Add to upcoming queue"
+                          >
+                            + Queue
+                          </button>
+
+                          {/* Move Up / Down Quick Buttons */}
+                          <div className="hidden lg:flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => handleMoveSong(idx, 'up', e)}
+                              disabled={idx === 0}
+                              className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white disabled:opacity-20 cursor-pointer text-[10px]"
+                              title="Move Up in Playlist & Queue"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              onClick={(e) => handleMoveSong(idx, 'down', e)}
+                              disabled={idx === activePlaylist.songs.length - 1}
+                              className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white disabled:opacity-20 cursor-pointer text-[10px]"
+                              title="Move Down in Playlist & Queue"
+                            >
+                              ▼
+                            </button>
+                          </div>
+
+                          {/* Play Button */}
                           <button
                             onClick={() => handlePlayTrack(track, idx)}
-                            className="w-6 h-6 rounded-md bg-red-600/80 hover:bg-red-600 flex items-center justify-center text-white shrink-0 shadow transition-transform group-hover:scale-110 cursor-pointer"
+                            className="w-7 h-7 rounded-lg bg-red-600/80 hover:bg-red-600 flex items-center justify-center text-white shrink-0 shadow transition-transform group-hover:scale-105 cursor-pointer"
                             title="Play Track"
                           >
-                            <svg className="w-3 h-3 translate-x-0.2" fill="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-3.5 h-3.5 translate-x-0.2" fill="currentColor" viewBox="0 0 24 24">
                               <path d="M8 5v14l11-7z" />
                             </svg>
                           </button>
@@ -1056,7 +1374,7 @@ const PlaylistsPage = () => {
                               e.stopPropagation();
                               handleRemoveTrackFromPlaylist(track.id);
                             }}
-                            className="w-6 h-6 rounded-md bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 flex items-center justify-center text-xs transition cursor-pointer"
+                            className="w-7 h-7 rounded-lg bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 flex items-center justify-center text-xs transition cursor-pointer"
                             title="Remove from playlist"
                           >
                             ✕
@@ -1149,12 +1467,10 @@ const PlaylistsPage = () => {
                   >
                     <div className="flex items-center gap-3 min-w-0 pr-3">
                       <img
-                        src={song.image || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=100&q=80'}
+                        src={resolveTrackArtwork(song)}
                         alt={song.name}
                         className="w-11 h-11 rounded-xl object-cover shrink-0 shadow-sm"
-                        onError={(e) => {
-                          e.target.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=100&q=80';
-                        }}
+                        onError={(e) => handleArtworkError(e, song)}
                       />
                       <div className="min-w-0">
                         <p className="text-xs sm:text-sm font-semibold text-white truncate">{song.name}</p>

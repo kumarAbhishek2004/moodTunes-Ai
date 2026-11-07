@@ -1,7 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
+import { playSong, setQueue } from '../store/audioSlice';
+import { getUserPlaylistSongs } from '../utils/userStorage';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
+
+
+const STARTER_MOOD_PLAYLISTS = [
+  { id: 'starter-calm-and-relax', name: 'Calm & Relax', mood: 'calm', emoji: '🍃' },
+  { id: 'starter-happy-vibes', name: 'Happy Vibes', mood: 'happy', emoji: '😊' },
+  { id: 'starter-energetic-boost', name: 'Energetic Boost', mood: 'energetic', emoji: '⚡' },
+  { id: 'starter-late-night-blues', name: 'Late Night Blues', mood: 'sad', emoji: '🌙' },
+  { id: 'starter-deep-focus', name: 'Deep Focus', mood: 'focus', emoji: '🎯' },
+  { id: 'starter-romantic-twilight', name: 'Romantic Twilight', mood: 'romantic', emoji: '💖' },
+];
 
 const CHATBOT_MOOD_THEMES = {
   calm: {
@@ -63,7 +75,7 @@ const CHATBOT_MOOD_THEMES = {
 const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) => {
   // Load messages from sessionStorage on mount
   const [messages, setMessages] = useState(() => {
-    const savedMessages = sessionStorage.getItem('chatbotMessages');
+    const savedMessages = localStorage.getItem('chatbotMessages');
     if (savedMessages) {
       return JSON.parse(savedMessages);
     }
@@ -86,6 +98,8 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
   const reduxCurrentSong = useSelector((state) => state.audio?.currentSong);
   const isPlayerDismissed = useSelector((state) => state.audio?.isPlayerDismissed);
   const reduxActiveMood = useSelector((state) => state.audio?.activeMood);
+  const authUser = useSelector((state) => state.auth?.user);
+  const dispatch = useDispatch();
 
   // Dynamic vertical offset: If BottomPlayer dock is active, float above dock; otherwise stay anchored near bottom corner
   const isBottomPlayerVisible = Boolean(reduxCurrentSong && !isPlayerDismissed);
@@ -129,7 +143,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
 
   // Save messages to sessionStorage whenever they change
   useEffect(() => {
-    sessionStorage.setItem('chatbotMessages', JSON.stringify(messages));
+    localStorage.setItem('chatbotMessages', JSON.stringify(messages));
     scrollToBottom();
   }, [messages]);
 
@@ -191,78 +205,147 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
     }
   };
 
-  const handlePlaylistClick = async (playlistName) => {
+  const handlePlaylistClick = async (playlistQuery) => {
     try {
-      console.log(`🎵 Loading playlist: "${playlistName}"`);
-      
-      setMessages(prev => [...prev, {
-        role: 'system',
-        content: `🎵 Loading playlist "${playlistName}"...`,
-        songs: [],
-        playCommand: null,
-        playlistName: null
-      }]);
-      
-      // Get auth token from localStorage
+      const q = String(playlistQuery || '').trim().toLowerCase();
+      const isAuto =
+        !q ||
+        q === 'auto' ||
+        q === 'my playlist' ||
+        q === 'the playlist' ||
+        q === 'playlist' ||
+        q === 'music' ||
+        q === 'music from my' ||
+        q === 'music from my playlist' ||
+        q === 'from my playlist' ||
+        q === 'from my' ||
+        q.includes('music from my') ||
+        q.includes('from my playlist');
+
+      // Load all custom user playlists from backend if available
+      let userCustomPlaylists = [];
       const token = localStorage.getItem('token');
-      if (!token) {
-        setMessages(prev => prev.filter(msg => !msg.content.includes('🎵 Loading playlist')));
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: '⚠️ Please login to access your playlists.',
-          songs: [],
-          playCommand: null,
-          playlistName: null
-        }]);
-        return;
+      if (token) {
+        try {
+          const resp = await axios.get(`${API_BASE_URL}/api/playlists`, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 2500,
+          });
+          if (Array.isArray(resp.data)) {
+            userCustomPlaylists = resp.data;
+          }
+        } catch (e) {}
       }
-      
-      const response = await axios.get(
-        `${API_BASE_URL}/api/playlists/by-name/${encodeURIComponent(playlistName)}`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
+
+      // Build complete pool with user-scoped stored songs
+      const allCandidatePlaylists = [
+        ...userCustomPlaylists.map(p => ({
+          ...p,
+          id: p.id || p._id,
+          songs: (p.songs && p.songs.length > 0) ? p.songs : getUserPlaylistSongs(p.id || p._id, authUser),
+        })),
+        ...STARTER_MOOD_PLAYLISTS.map(p => ({
+          ...p,
+          songs: getUserPlaylistSongs(p.id, authUser),
+        })),
+      ];
+
+      let targetPlaylist = null;
+
+      if (isAuto) {
+        // User requested "play music from my playlist": resolve by active mood!
+        const currentMoodKey = String(moodStr || reduxActiveMood || 'calm').toLowerCase();
+        
+        // 1. Try to find a playlist matching the active mood that has songs
+        targetPlaylist = allCandidatePlaylists.find(
+          p => String(p.mood || '').toLowerCase() === currentMoodKey && Array.isArray(p.songs) && p.songs.length > 0
+        );
+
+        // 2. If mood playlist is empty, pick the first user playlist that actually has songs
+        if (!targetPlaylist) {
+          targetPlaylist = allCandidatePlaylists.find(
+            p => Array.isArray(p.songs) && p.songs.length > 0
+          );
         }
-      );
-      
-      const playlist = response.data;
-      
-      if (!playlist.songs || playlist.songs.length === 0) {
-        setMessages(prev => prev.filter(msg => !msg.content.includes('🎵 Loading playlist')));
+
+        // 3. Fallback to the mood starter playlist even if empty (to give clear feedback)
+        if (!targetPlaylist) {
+          targetPlaylist = allCandidatePlaylists.find(
+            p => String(p.mood || '').toLowerCase() === currentMoodKey
+          ) || allCandidatePlaylists[0];
+        }
+      } else {
+        // Specific playlist name mentioned (e.g. "travelling", "romantic twilight", "happy vibes", "music")
+        targetPlaylist = allCandidatePlaylists.find(p => {
+          const pName = String(p.name || '').toLowerCase();
+          const pMood = String(p.mood || '').toLowerCase();
+          return pName === q || pName.includes(q) || q.includes(pName) || pMood === q;
+        });
+
+        // Backend fallback lookup by exact name if not found in local candidates
+        if (!targetPlaylist && token) {
+          try {
+            const resp = await axios.get(
+              `${API_BASE_URL}/api/playlists/by-name/${encodeURIComponent(playlistQuery)}`,
+              { headers: { Authorization: `Bearer ${token}` }, timeout: 2500 }
+            );
+            if (resp.data) {
+              const p = resp.data;
+              targetPlaylist = {
+                ...p,
+                id: p.id || p._id,
+                songs: (p.songs && p.songs.length > 0) ? p.songs : getUserPlaylistSongs(p.id || p._id, authUser),
+              };
+            }
+          } catch (e) {}
+        }
+      }
+
+      if (!targetPlaylist) {
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: `⚠️ Playlist "${playlistName}" is empty.`,
+          content: `❌ Could not find playlist "${playlistQuery}". Try mentioning one of your playlists like "Calm & Relax", "Happy Vibes", or your custom playlists!`,
           songs: [],
           playCommand: null,
-          playlistName: null
+          playlistName: null,
         }]);
         return;
       }
-      
-      setMessages(prev => prev.filter(msg => !msg.content.includes('🎵 Loading playlist')));
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `🎵 Now playing "${playlist.name}" (${playlist.songs.length} songs)`,
-        songs: [],
-        playCommand: null,
-        playlistName: null
-      }]);
-      
-      // Pass playlist to parent component to handle playback
-      if (onPlayPlaylist) {
-        onPlayPlaylist(playlist);
+
+      if (!targetPlaylist.songs || targetPlaylist.songs.length === 0) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `⚠️ Your playlist "${targetPlaylist.name}" is currently empty. Add songs to it using the "+ Add to Playlist" button on any track!`,
+          songs: [],
+          playCommand: null,
+          playlistName: null,
+        }]);
+        return;
       }
-      
-    } catch (error) {
-      console.error('❌ Playlist error:', error);
-      setMessages(prev => prev.filter(msg => !msg.content.includes('🎵 Loading playlist')));
-      
-      const errorMsg = error.response?.data?.detail || `Playlist "${playlistName}" not found`;
+
+      // Immediately initiate playback!
+      dispatch(setQueue(targetPlaylist.songs));
+      dispatch(playSong(targetPlaylist.songs[0]));
+      if (onPlayPlaylist) {
+        onPlayPlaylist(targetPlaylist);
+      }
+
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `❌ ${errorMsg}`,
+        content: `🎵 Now playing from your "${targetPlaylist.name}" playlist (${targetPlaylist.songs.length} tracks)!`,
+        songs: targetPlaylist.songs.slice(0, 5),
+        playCommand: null,
+        playlistName: targetPlaylist.name,
+      }]);
+
+    } catch (error) {
+      console.error('❌ Playlist playback error:', error);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `❌ Could not play playlist "${playlistQuery}". Please try again.`,
         songs: [],
         playCommand: null,
-        playlistName: null
+        playlistName: null,
       }]);
     }
   };
@@ -433,6 +516,40 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
   const handleSendMessage = async (messageText) => {
     const textToSend = messageText || input;
     if (!textToSend.trim()) return;
+
+    // Check for direct playlist voice/text intent (instant response without roundtrip)
+    const lower = textToSend.trim().toLowerCase();
+    const isPlaylistIntent = 
+      /\b(?:play|start|listen to)\s+(?:music\s+)?(?:from\s+)?(?:my\s+)?(?:the\s+)?playlist\b/i.test(lower) ||
+      /\b(?:play|start|listen to)\s+my\s+playlist\b/i.test(lower) ||
+      /\b(?:play|start|listen to)\s+playlist\b/i.test(lower) ||
+      /\bplay\s+(?:my\s+)?([a-zA-Z0-9_\-\s&]+?)\s+playlist\b/i.test(lower) ||
+      /\bplay\s+playlist\s+([a-zA-Z0-9_\-\s&]+)\b/i.test(lower);
+
+    if (isPlaylistIntent) {
+      // NOTE: Do NOT append user message here — handleSend/transcribeAudio already appended it!
+      setInput('');
+
+      let playlistTarget = 'auto';
+      const m1 = lower.match(/\b(?:play|start|listen to)\s+(?:my\s+)?([a-zA-Z0-9_\-\s&]+?)\s+playlist\b/i);
+      const m2 = lower.match(/\b(?:play|start|listen to)\s+playlist\s+([a-zA-Z0-9_\-\s&]+)\b/i);
+      const genericWords = ['music', 'song', 'songs', 'track', 'tracks', 'music from', 'music from my', 'from my', 'my', 'the', 'a', ''];
+
+      if (m1 && m1[1]) {
+        const raw = m1[1].replace(/^(?:some|any|a|the|my|our)\s+/, '').trim();
+        if (!genericWords.includes(raw)) {
+          playlistTarget = raw;
+        }
+      } else if (m2 && m2[1]) {
+        const raw = m2[1].replace(/^(?:named|called|title)\s+/, '').trim();
+        if (!genericWords.includes(raw)) {
+          playlistTarget = raw;
+        }
+      }
+
+      await handlePlaylistClick(playlistTarget);
+      return;
+    }
 
     setIsLoading(true);
 
@@ -629,7 +746,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => {
-                  sessionStorage.removeItem('chatbotMessages');
+                  localStorage.removeItem('chatbotMessages');
                   setMessages([
                     {
                       role: 'assistant',

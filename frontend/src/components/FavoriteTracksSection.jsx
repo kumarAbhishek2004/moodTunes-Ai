@@ -5,6 +5,7 @@ import { API_BASE_URL } from '../config/api';
 import { playSong, setQueue } from '../store/audioSlice';
 import { resolveMusicTheme } from '../utils/themeMap';
 import { resolveKnownYouTubeId } from '../utils/songMap';
+import { resolveTrackArtwork, handleArtworkError } from '../utils/imageHelper';
 
 // Curated Starter Favorites for each of the 6 moods (Leaving slots 3, 4, 5 open for user personalization)
 const DEFAULT_FAVORITES_BY_MOOD = {
@@ -82,8 +83,8 @@ const DEFAULT_FAVORITES_BY_MOOD = {
       id: 'fav-e-2',
       name: 'Machayenge 3',
       artist: 'Emiway Bantai',
-      youtube_id: 'Dlz_XHeUUcw',
-      image: 'https://i.ytimg.com/vi/Dlz_XHeUUcw/hqdefault.jpg',
+      youtube_id: 'nJNooQDc0Bs',
+      image: 'https://i.ytimg.com/vi/nJNooQDc0Bs/hqdefault.jpg',
       duration: 185,
       mood_match: 'Energetic',
     },
@@ -294,7 +295,7 @@ const FRONTEND_SEARCH_CATALOG = [
   { id: 'r-4', name: 'Channa Mereya', artist: 'Arijit Singh', youtube_id: '284Ov7ysmfA', image: 'https://i.ytimg.com/vi/284Ov7ysmfA/hqdefault.jpg', duration: 289, detected_mood: 'Romantic', mood_match: 'Romantic' },
   { id: 'r-5', name: 'Agar Tum Saath Ho', artist: 'Alka Yagnik & Arijit Singh', youtube_id: 'sK7riqg2mr4', image: 'https://i.ytimg.com/vi/sK7riqg2mr4/hqdefault.jpg', duration: 341, detected_mood: 'Romantic', mood_match: 'Romantic' },
   { id: 'r-6', name: 'Shayad', artist: 'Arijit Singh', youtube_id: 'mFvyb7Fj9_8', image: 'https://i.ytimg.com/vi/mFvyb7Fj9_8/hqdefault.jpg', duration: 247, detected_mood: 'Romantic', mood_match: 'Romantic' },
-  { id: 'r-7', name: 'Tere Vaste', artist: 'Varun Jain & Sachin-Jigar', youtube_id: 'VAdGW7QDJUI', image: 'https://i.ytimg.com/vi/VAdGW7QDJUI/hqdefault.jpg', duration: 189, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-7', name: 'Tere Vaste', artist: 'Varun Jain & Sachin-Jigar', youtube_id: 'VAdGW7QDJiU', image: 'https://i.ytimg.com/vi/VAdGW7QDJiU/hqdefault.jpg', duration: 189, detected_mood: 'Romantic', mood_match: 'Romantic' },
   { id: 'r-8', name: 'O Maahi', artist: 'Arijit Singh', youtube_id: '7c3-Ge36k3w', image: 'https://i.ytimg.com/vi/7c3-Ge36k3w/hqdefault.jpg', duration: 233, detected_mood: 'Romantic', mood_match: 'Romantic' },
   { id: 'r-9', name: 'Heeriye', artist: 'Jasleen Royal & Arijit Singh', youtube_id: 'RLzC55ai0eo', image: 'https://i.ytimg.com/vi/RLzC55ai0eo/hqdefault.jpg', duration: 194, detected_mood: 'Romantic', mood_match: 'Romantic' },
   { id: 'r-10', name: 'Kahani Suno 2.0', artist: 'Kaifi Khalil', youtube_id: '_XBVWlI8TsQ', image: 'https://i.ytimg.com/vi/_XBVWlI8TsQ/hqdefault.jpg', duration: 173, detected_mood: 'Romantic', mood_match: 'Romantic' },
@@ -323,16 +324,16 @@ const FRONTEND_SEARCH_CATALOG = [
 
   // Energetic
   { id: 'e-1', name: 'Believer', artist: 'Imagine Dragons', youtube_id: '7wtfhZwyrcc', image: 'https://i.ytimg.com/vi/7wtfhZwyrcc/hqdefault.jpg', duration: 204, detected_mood: 'Energetic', mood_match: 'Energetic' },
-  { id: 'e-2', name: 'Machayenge 3', artist: 'Emiway Bantai', youtube_id: 'Dlz_XHeUUcw', image: 'https://i.ytimg.com/vi/Dlz_XHeUUcw/hqdefault.jpg', duration: 185, detected_mood: 'Energetic', mood_match: 'Energetic' },
-  { id: 'e-3', name: 'Love Dose', artist: 'Yo Yo Honey Singh', youtube_id: 'TvngY4unyL4', image: 'https://i.ytimg.com/vi/TvngY4unyL4/hqdefault.jpg', duration: 228, detected_mood: 'Energetic', mood_match: 'Energetic' },
-  { id: 'e-4', name: 'Desi Kalakaar', artist: 'Yo Yo Honey Singh', youtube_id: 'KhnvxXffwio', image: 'https://i.ytimg.com/vi/KhnvxXffwio/hqdefault.jpg', duration: 259, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-2', name: 'Machayenge 3', artist: 'Emiway Bantai', youtube_id: 'nJNooQDc0Bs', image: 'https://i.ytimg.com/vi/nJNooQDc0Bs/hqdefault.jpg', duration: 185, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-3', name: 'Love Dose', artist: 'Yo Yo Honey Singh', youtube_id: 'nW9WwkWwaW8', image: 'https://i.ytimg.com/vi/nW9WwkWwaW8/hqdefault.jpg', duration: 228, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-4', name: 'Desi Kalakaar', artist: 'Yo Yo Honey Singh', youtube_id: 'KhnVcAC5bIm', image: 'https://i.ytimg.com/vi/KhnVcAC5bIm/hqdefault.jpg', duration: 259, detected_mood: 'Energetic', mood_match: 'Energetic' },
   { id: 'e-5', name: 'Blue Eyes', artist: 'Yo Yo Honey Singh', youtube_id: 'NbyHNASFi6U', image: 'https://i.ytimg.com/vi/NbyHNASFi6U/hqdefault.jpg', duration: 220, detected_mood: 'Energetic', mood_match: 'Energetic' },
-  { id: 'e-6', name: 'Dope Shope', artist: 'Yo Yo Honey Singh', youtube_id: 't0qI_01sLpQ', image: 'https://i.ytimg.com/vi/t0qI_01sLpQ/hqdefault.jpg', duration: 190, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-6', name: 'Dope Shope', artist: 'Yo Yo Honey Singh', youtube_id: 'NrXdauEv9HY', image: 'https://i.ytimg.com/vi/NrXdauEv9HY/hqdefault.jpg', duration: 190, detected_mood: 'Energetic', mood_match: 'Energetic' },
   { id: 'e-7', name: 'Brown Rang', artist: 'Yo Yo Honey Singh', youtube_id: 'PqFMFVcCZgI', image: 'https://i.ytimg.com/vi/PqFMFVcCZgI/hqdefault.jpg', duration: 175, detected_mood: 'Energetic', mood_match: 'Energetic' },
   { id: 'e-8', name: 'High Heels', artist: 'Yo Yo Honey Singh & Jaz Dhami', youtube_id: 'kJqU9F2p6_4', image: 'https://i.ytimg.com/vi/kJqU9F2p6_4/hqdefault.jpg', duration: 215, detected_mood: 'Energetic', mood_match: 'Energetic' },
   { id: 'e-9', name: 'Angreji Beat', artist: 'Yo Yo Honey Singh & Gippy Grewal', youtube_id: '2oMv4N1GkQk', image: 'https://i.ytimg.com/vi/2oMv4N1GkQk/hqdefault.jpg', duration: 210, detected_mood: 'Energetic', mood_match: 'Energetic' },
   { id: 'e-10', name: 'Lungi Dance', artist: 'Yo Yo Honey Singh', youtube_id: '2kWly_tXpFQ', image: 'https://i.ytimg.com/vi/2kWly_tXpFQ/hqdefault.jpg', duration: 230, detected_mood: 'Energetic', mood_match: 'Energetic' },
-  { id: 'e-11', name: 'Chaleya', artist: 'Arijit Singh & Shilpa Rao', youtube_id: 'VAdGW7QDJUI', image: 'https://i.ytimg.com/vi/VAdGW7QDJUI/hqdefault.jpg', duration: 200, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-11', name: 'Chaleya', artist: 'Arijit Singh & Shilpa Rao', youtube_id: 'VAdGW7QDJiU', image: 'https://i.ytimg.com/vi/VAdGW7QDJiU/hqdefault.jpg', duration: 200, detected_mood: 'Energetic', mood_match: 'Energetic' },
   { id: 'e-12', name: 'Boom Shack-A-Lak', artist: 'Apache Indian', youtube_id: 'kZzBd41NuZw', image: 'https://i.ytimg.com/vi/kZzBd41NuZw/hqdefault.jpg', duration: 272, detected_mood: 'Energetic', mood_match: 'Energetic' },
   { id: 'e-13', name: 'Starboy', artist: 'The Weeknd', youtube_id: '34Na4j8AVgA', image: 'https://i.ytimg.com/vi/34Na4j8AVgA/hqdefault.jpg', duration: 230, detected_mood: 'Energetic', mood_match: 'Energetic' },
   { id: 'e-14', name: 'Blinding Lights', artist: 'The Weeknd', youtube_id: '4NRXx6U8ABQ', image: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg', duration: 200, detected_mood: 'Energetic', mood_match: 'Energetic' },
@@ -919,22 +920,10 @@ const FavoriteTracksSection = () => {
               {/* Artwork Container */}
               <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-obsidian-950 mb-2.5 shadow-inner">
                 <img
-                  src={
-                    song.image && !song.image.includes('1511671782779')
-                      ? song.image
-                      : (song.youtube_id
-                          ? `https://i.ytimg.com/vi/${song.youtube_id}/hqdefault.jpg`
-                          : `https://ui-avatars.com/api/?name=${encodeURIComponent(song.name || 'Song')}&background=0f172a&color=38bdf8&size=500&font-size=0.35&bold=true`)
-                  }
+                  src={resolveTrackArtwork(song)}
                   alt={song.name}
                   className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500"
-                  onError={(e) => {
-                    if (song.youtube_id && !e.target.src.includes('ytimg.com')) {
-                      e.target.src = `https://i.ytimg.com/vi/${song.youtube_id}/hqdefault.jpg`;
-                    } else {
-                      e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(song.name || 'Song')}&background=0f172a&color=38bdf8&size=500&font-size=0.35&bold=true`;
-                    }
-                  }}
+                  onError={(e) => handleArtworkError(e, song)}
                 />
 
                 {/* Play overlay */}
@@ -1191,12 +1180,9 @@ const FavoriteTracksSection = () => {
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             <img
-                              src={item.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=1e1b4b&color=a855f7&size=200&bold=true`}
+                              src={resolveTrackArtwork(item)}
                               alt={item.name}
-                              onError={(e) => {
-                                e.target.onerror = null;
-                                e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=1e1b4b&color=a855f7&size=200&bold=true`;
-                              }}
+                              onError={(e) => handleArtworkError(e, item)}
                               className="w-10 h-10 rounded-lg object-cover bg-obsidian-800 flex-shrink-0 shadow"
                             />
                             <div className="min-w-0">

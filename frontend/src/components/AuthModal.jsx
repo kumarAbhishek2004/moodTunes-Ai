@@ -13,6 +13,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess }) => {
     full_name: ''
   });
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
   const API_URL = API_BASE_URL;
@@ -20,24 +21,33 @@ const AuthModal = ({ isOpen, onClose, onSuccess }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccessMsg('');
     setLoading(true);
 
     try {
-      const endpoint = isLogin ? '/auth/login' : '/auth/signup';
-      const payload = isLogin 
-        ? { email: formData.email, password: formData.password }
-        : formData;
-
-      const response = await axios.post(`${API_URL}${endpoint}`, payload);
-      
-      // Update Redux store and localStorage
-      dispatch(setCredentials(response.data));
-      
-      if (onSuccess) onSuccess(response.data);
-      onClose();
-      
+      if (isLogin) {
+        const response = await axios.post(`${API_URL}/auth/login`, {
+          email: formData.email,
+          password: formData.password,
+        });
+        dispatch(setCredentials(response.data));
+        if (onSuccess) onSuccess(response.data);
+        onClose();
+      } else {
+        await axios.post(`${API_URL}/auth/signup`, formData);
+        setSuccessMsg('🎉 Account created successfully! Please enter your password to log in.');
+        setIsLogin(true);
+        setFormData((prev) => ({ ...prev, password: '' }));
+      }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Authentication failed');
+      const detail = err.response?.data?.detail;
+      setError(
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+          ? detail.map((d) => d.msg).join('. ')
+          : 'Authentication failed'
+      );
     } finally {
       setLoading(false);
     }
@@ -116,6 +126,12 @@ const AuthModal = ({ isOpen, onClose, onSuccess }) => {
               placeholder="••••••••"
             />
           </div>
+
+          {successMsg && (
+            <div className="bg-emerald-500/20 border border-emerald-500 text-emerald-300 rounded-lg p-3 text-sm">
+              {successMsg}
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-500/20 border border-red-500 text-red-300 rounded-lg p-3 text-sm">

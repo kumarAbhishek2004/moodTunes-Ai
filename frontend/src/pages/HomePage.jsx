@@ -5,10 +5,10 @@ import Webcam from 'react-webcam';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 import { playSong, setQueue, setActiveMood } from '../store/audioSlice';
+import { playSongWithSimilarQueue } from '../utils/queueHelper';
 import { resolveMusicTheme } from '../utils/themeMap';
 import FavoriteTracksSection from '../components/FavoriteTracksSection';
 import RotaryMoodDial from '../components/RotaryMoodDial';
-import Chatbot from '../components/Chatbot';
 
 const MOOD_WALLPAPERS = {
   happy: '/assets/aura-hero-bg.jpg',
@@ -143,7 +143,6 @@ const HomePage = () => {
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const [isTypeOpen, setIsTypeOpen] = useState(false);
-  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
 
   const [sceneInput, setSceneInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -751,7 +750,7 @@ const HomePage = () => {
                 </div>
 
                 <h3 className="text-xs font-bold text-white tracking-tight">
-                  Dial Atmosphere
+                  Mood Selector
                 </h3>
               </div>
 
@@ -804,6 +803,103 @@ const HomePage = () => {
         {/* FAVORITE TRACKS SECTION (UP TO 5, CUSTOMIZABLE, DB-SYNCED)     */}
         {/* ============================================================== */}
         <FavoriteTracksSection />
+
+        {/* ============================================================== */}
+        {/* HOW IT WORKS: SIMPLE & ELEGANT EXPLAINER SECTION                */}
+        {/* ============================================================== */}
+        <div className="mt-12 sm:mt-16 rounded-3xl bg-slate-900/40 border border-white/10 p-6 sm:p-10 backdrop-blur-2xl shadow-2xl relative overflow-hidden">
+          {/* Subtle Accent Glow */}
+          <div
+            className="absolute -top-12 -right-12 w-48 h-48 rounded-full blur-3xl opacity-20 pointer-events-none"
+            style={{ backgroundColor: mood.color }}
+          />
+
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] font-mono font-bold tracking-wider mb-2">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: mood.color }} />
+                <span style={{ color: mood.color }}>HOW MOODTUNES AI WORKS</span>
+              </div>
+              <h2 className="text-xl sm:text-3xl font-extrabold text-white tracking-tight">
+                Your Mood. Your Music. Zero Complexity.
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-xl">
+                Experience music curated specifically around your current emotional state in 3 easy steps.
+              </p>
+            </div>
+
+            <button
+              onClick={() => navigate('/about')}
+              className="px-4 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 self-start sm:self-auto border cursor-pointer"
+              style={{
+                backgroundColor: `${mood.color}18`,
+                borderColor: `${mood.color}45`,
+                color: mood.color,
+              }}
+            >
+              <span>Explore Complete Guide & FAQ</span>
+              <span>→</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+            {/* Step 1 */}
+            <div className="p-5 rounded-2xl bg-white/5 border border-white/5 hover:border-white/15 transition-all space-y-3 group">
+              <div className="flex items-center justify-between">
+                <span className="text-2xl">🎭</span>
+                <span className="text-xs font-mono font-bold text-slate-500 group-hover:text-slate-300">STEP 01</span>
+              </div>
+              <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                Detect or Pick Your Mood
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Scan your face expression via camera, speak your mood via voice tone, type any scene description, or turn the 360° Mood Selector dial.
+              </p>
+              <div className="pt-1 flex flex-wrap gap-1 text-[10px] font-mono text-slate-400">
+                <span className="px-2 py-0.5 rounded bg-black/40 border border-white/5">📸 Face Scan</span>
+                <span className="px-2 py-0.5 rounded bg-black/40 border border-white/5">🎙️ Voice</span>
+                <span className="px-2 py-0.5 rounded bg-black/40 border border-white/5">🎛️ Live Dial</span>
+              </div>
+            </div>
+
+            {/* Step 2 */}
+            <div className="p-5 rounded-2xl bg-white/5 border border-white/5 hover:border-white/15 transition-all space-y-3 group">
+              <div className="flex items-center justify-between">
+                <span className="text-2xl">🧠</span>
+                <span className="text-xs font-mono font-bold text-slate-500 group-hover:text-slate-300">STEP 02</span>
+              </div>
+              <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                Acoustic AI & Explainability
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                AI cross-references emotional valence with tempo, BPM, and acoustic keys. Every song gives you an Explainable AI badge so you know why it fits.
+              </p>
+              <div className="pt-1 flex flex-wrap gap-1 text-[10px] font-mono text-slate-400">
+                <span className="px-2 py-0.5 rounded bg-black/40 border border-white/5">💡 Explainable AI</span>
+                <span className="px-2 py-0.5 rounded bg-black/40 border border-white/5">⚡ BPM Match</span>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="p-5 rounded-2xl bg-white/5 border border-white/5 hover:border-white/15 transition-all space-y-3 group">
+              <div className="flex items-center justify-between">
+                <span className="text-2xl">🥞</span>
+                <span className="text-xs font-mono font-bold text-slate-500 group-hover:text-slate-300">STEP 03</span>
+              </div>
+              <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                Custom Queue & Playlists
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Full sovereignty over playback! Drag and drop tracks to reorder queue or playlists, click <strong>⚡ Next</strong> to schedule tracks immediately, and spin records in the 12" Vinyl Studio.
+              </p>
+              <div className="pt-1 flex flex-wrap gap-1 text-[10px] font-mono text-slate-400">
+                <span className="px-2 py-0.5 rounded bg-black/40 border border-white/5">⠿ Drag & Drop</span>
+                <span className="px-2 py-0.5 rounded bg-black/40 border border-white/5">⚡ Play Next</span>
+                <span className="px-2 py-0.5 rounded bg-black/40 border border-white/5">💿 Vinyl Studio</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ============================================================== */}
@@ -1143,24 +1239,7 @@ const HomePage = () => {
         </div>
       )}
 
-      {/* ============================================================== */}
-      {/* FLOATING AI CHATBOT ASSISTANT ON HOME PAGE                     */}
-      {/* ============================================================== */}
-      <Chatbot
-        isOpen={isChatbotOpen}
-        onToggle={() => setIsChatbotOpen(!isChatbotOpen)}
-        currentMood={activeMoodKey}
-        onPlaySong={(song) => {
-          dispatch(setQueue([song]));
-          dispatch(playSong(song));
-        }}
-        onPlayPlaylist={(playlist) => {
-          if (playlist?.songs?.length > 0) {
-            dispatch(setQueue(playlist.songs));
-            dispatch(playSong(playlist.songs[0]));
-          }
-        }}
-      />
+
     </div>
   );
 };

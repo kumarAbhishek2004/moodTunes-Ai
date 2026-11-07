@@ -8,6 +8,8 @@ import {
   setProgress,
   clearSeekTarget,
   updateSongYouTubeId,
+  clearSleepTimer,
+  tickSleepTimer,
 } from '../store/audioSlice';
 import { resolveKnownYouTubeId } from '../utils/songMap';
 
@@ -21,6 +23,7 @@ const PersistentAudioEngine = () => {
   const playerRef = useRef(null);
   const pollTimerRef = useRef(null);
   const isApiReadyRef = useRef(false);
+  const isTransitioningRef = useRef(false);
 
   const {
     currentSong,
@@ -29,7 +32,27 @@ const PersistentAudioEngine = () => {
     isMuted,
     seekTarget,
     isVideoMode,
+    sleepTimer,
   } = useSelector((state) => state.audio);
+
+  const sleepTimerRef = useRef(sleepTimer);
+  useEffect(() => {
+    sleepTimerRef.current = sleepTimer;
+  }, [sleepTimer]);
+
+  const triggerAdvanceNext = () => {
+    if (isTransitioningRef.current) return;
+    if (sleepTimerRef.current?.active && sleepTimerRef.current?.isEndOfTrack) {
+      dispatch(setPlaying(false));
+      dispatch(clearSleepTimer());
+      return;
+    }
+    isTransitioningRef.current = true;
+    dispatch(playNext());
+    setTimeout(() => {
+      isTransitioningRef.current = false;
+    }, 1200);
+  };
 
   // 1. Load YouTube IFrame API script dynamically once
   useEffect(() => {
@@ -83,7 +106,7 @@ const PersistentAudioEngine = () => {
           onStateChange: (event) => {
             // YT.PlayerState.ENDED = 0
             if (event.data === 0) {
-              dispatch(playNext());
+              triggerAdvanceNext();
             }
             // YT.PlayerState.PLAYING = 1
             else if (event.data === 1) {
@@ -91,12 +114,15 @@ const PersistentAudioEngine = () => {
             }
             // YT.PlayerState.PAUSED = 2
             else if (event.data === 2) {
-              dispatch(setPlaying(false));
+              // Ignore pause if we are in the middle of track transition
+              if (!isTransitioningRef.current) {
+                dispatch(setPlaying(false));
+              }
             }
           },
           onError: (err) => {
             console.warn('YouTube Player error:', err.data);
-            // If the video cannot be embedded or is restricted, attempt an alternate search for the same song
+            // If the video cannot be embedded or is restricted, attempt an alternate search or auto-advance
             if (currentSong && (err.data === 101 || err.data === 150 || err.data === 2)) {
               axios
                 .get(`${API_BASE_URL}/youtube/search`, {
@@ -124,41 +150,31 @@ const PersistentAudioEngine = () => {
   useEffect(() => {
     if (!currentSong) return;
 
-    // Immediately stop or pause previous audio so the PREVIOUS track NEVER continues playing!
-    if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
-      try {
-        playerRef.current.pauseVideo();
-      } catch (e) {}
-    }
-
     const loadAndPlay = (vidId) => {
       if (!playerRef.current || typeof playerRef.current.loadVideoById !== 'function') return;
       try {
-        if (isPlaying) {
-          playerRef.current.loadVideoById(vidId);
-        } else {
-          playerRef.current.cueVideoById(vidId);
+        playerRef.current.loadVideoById(vidId);
+        if (playerRef.current.playVideo) {
+          playerRef.current.playVideo();
         }
+        dispatch(setPlaying(true));
       } catch (e) {
         console.error('Error loading video by ID:', e);
       }
     };
 
-    // Verify if currentSong has a valid YouTube ID that actually belongs to it
+    // Ground truth: ALWAYS check fast verified known songs map first (e.g. Love Dose, Desi Kalakaar, Chaleya)
     const isRaataan = String(currentSong.name || '').toLowerCase().includes('raataan');
-    let effectiveVidId = currentSong.youtube_id;
+    const knownVidId = resolveKnownYouTubeId(currentSong.name, currentSong.artist);
+    let effectiveVidId = knownVidId || currentSong.youtube_id;
 
     // Discard wrongly assigned fallback ID (Raataan Lambiyan) for non-Raataan tracks
     if (effectiveVidId === 'gvyUuxdRdR4' && !isRaataan) {
       effectiveVidId = null;
     }
 
-    // Check fast known songs map (e.g. Love Dose -> TvngY4unyL4)
-    if (!effectiveVidId) {
-      effectiveVidId = resolveKnownYouTubeId(currentSong.name, currentSong.artist);
-      if (effectiveVidId) {
-        dispatch(updateSongYouTubeId({ id: currentSong.id, name: currentSong.name, artist: currentSong.artist, youtube_id: effectiveVidId }));
-      }
+    if (effectiveVidId && effectiveVidId !== currentSong.youtube_id) {
+      dispatch(updateSongYouTubeId({ id: currentSong.id, name: currentSong.name, artist: currentSong.artist, youtube_id: effectiveVidId }));
     }
 
     if (effectiveVidId) {
@@ -261,6 +277,11 @@ const PersistentAudioEngine = () => {
             const current = playerRef.current.getCurrentTime() || 0;
             const dur = playerRef.current.getDuration() || 0;
             dispatch(setProgress({ currentTime: Math.floor(current), duration: Math.floor(dur) }));
+
+            // Guaranteed Autoplay: If track reached within 0.8s of the end, trigger next song
+            if (dur > 5 && current >= dur - 0.8) {
+              triggerAdvanceNext();
+            }
           } catch (e) {}
         }
       }, 500);
@@ -284,6 +305,35 @@ const PersistentAudioEngine = () => {
       }
     } catch (e) {}
   }, [isVideoMode, isPlaying, currentSong]);
+
+
+  // 6.1 Sleep Timer Countdown & 15s Smooth Fade-Out
+  useEffect(() => {
+    if (!sleepTimer?.active || sleepTimer?.isEndOfTrack) return;
+
+    const timer = setInterval(() => {
+      if (!sleepTimer.targetTimestamp) return;
+      const now = Date.now();
+      const remainingSec = Math.max(0, Math.round((sleepTimer.targetTimestamp - now) / 1000));
+      dispatch(tickSleepTimer(remainingSec));
+
+      if (playerRef.current && typeof playerRef.current.setVolume === 'function') {
+        if (remainingSec <= 15 && remainingSec > 0) {
+          const baseVol = sleepTimer.initialVolumeBeforeFade ?? volume;
+          const faded = Math.round(baseVol * (remainingSec / 15));
+          playerRef.current.setVolume(faded);
+        } else if (remainingSec === 0) {
+          dispatch(setPlaying(false));
+          dispatch(clearSleepTimer());
+          if (sleepTimer.initialVolumeBeforeFade !== null) {
+            playerRef.current.setVolume(sleepTimer.initialVolumeBeforeFade);
+          }
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [sleepTimer?.active, sleepTimer?.targetTimestamp, sleepTimer?.isEndOfTrack, sleepTimer?.initialVolumeBeforeFade, volume, dispatch]);
 
   return (
     <div

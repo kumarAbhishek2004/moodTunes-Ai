@@ -11,11 +11,15 @@ import {
   cycleRepeatMode,
   toggleQueue,
   toggleTurntable,
+  openVibeCard,
+  toggleSleepTimerModal,
+  toggleShortcutsModal,
   closePlayer,
   reopenPlayer,
   clearCurrentSong,
 } from '../store/audioSlice';
 import { resolveMusicTheme } from '../utils/themeMap';
+import { resolveTrackArtwork, handleArtworkError } from '../utils/imageHelper';
 
 // Helper to format seconds into mm:ss
 const formatTime = (seconds) => {
@@ -115,6 +119,7 @@ const BottomPlayer = () => {
     isQueueOpen,
     activeMood,
     isPlayerDismissed,
+    sleepTimer,
   } = useSelector((state) => state.audio);
 
   const [isLiked, setIsLiked] = useState(false);
@@ -210,25 +215,12 @@ const BottomPlayer = () => {
             className="group relative w-13 h-13 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-obsidian-900 border border-white/10 flex-shrink-0 cursor-pointer shadow-md"
             title="Click to expand Vinyl Turntable"
           >
-            {currentSong.image ? (
-              <img
-                src={currentSong.image}
-                alt={currentSong.name}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                }}
-              />
-            ) : (
-              <div
-                className="w-full h-full flex items-center justify-center"
-                style={{ backgroundColor: `${moodStyle.accent}15` }}
-              >
-                <svg className="w-6 h-6" style={{ color: moodStyle.accent }} fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-                </svg>
-              </div>
-            )}
+            <img
+              src={resolveTrackArtwork(currentSong)}
+              alt={currentSong.name}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+              onError={(e) => handleArtworkError(e, currentSong)}
+            />
 
             {/* Hover expand overlay */}
             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
@@ -284,6 +276,16 @@ const BottomPlayer = () => {
                 d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
               />
             </svg>
+          </button>
+
+          {/* Share Vibe Card Button */}
+          <button
+            onClick={() => dispatch(openVibeCard(currentSong))}
+            aria-label="Share Vibe Card"
+            className="p-1.5 text-slate-400 hover:text-white transition-colors focus:outline-none"
+            title="Generate Shareable Vibe Card (Press V)"
+          >
+            <span className="text-sm">📸</span>
           </button>
         </div>
 
@@ -482,6 +484,35 @@ const BottomPlayer = () => {
               className="w-20 h-1 bg-obsidian-700 rounded-full appearance-none cursor-pointer group-hover:bg-obsidian-600 transition-colors"
             />
           </div>
+
+          {/* Sleep Timer Button */}
+          <button
+            onClick={() => dispatch(toggleSleepTimerModal())}
+            aria-label="Sleep Timer"
+            className={`p-1.5 rounded-xl transition-all flex items-center gap-1 ${
+              sleepTimer?.active
+                ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-400/50'
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+            title="Sleep Timer (Press S)"
+          >
+            <span className="text-sm">🌙</span>
+            {sleepTimer?.active && (
+              <span className="text-[10px] font-mono font-bold text-indigo-300 hidden sm:inline">
+                {sleepTimer.isEndOfTrack ? 'Track' : `${Math.ceil(sleepTimer.remainingSeconds / 60)}m`}
+              </span>
+            )}
+          </button>
+
+          {/* Keyboard Shortcuts Guide Button */}
+          <button
+            onClick={() => dispatch(toggleShortcutsModal())}
+            aria-label="Keyboard Shortcuts"
+            className="hidden xl:flex p-1.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all"
+            title="Keyboard Shortcuts (Press ?)"
+          >
+            <span className="text-xs font-mono font-bold">⌨️</span>
+          </button>
 
           {/* Fullscreen Vinyl Turntable Maximize Button [ ⛶ ] (Image 2) */}
           <button

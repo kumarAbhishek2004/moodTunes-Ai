@@ -7,11 +7,11 @@
 
 export const FAMOUS_SONGS_YOUTUBE = {
   // Yo Yo Honey Singh hits
-  'love dose': 'TvngY4unyL4',
-  'lovedose': 'TvngY4unyL4',
-  'desi kalakaar': 'KhnvxXffwio',
+  'love dose': 'nW9WwkWwaW8',
+  'lovedose': 'nW9WwkWwaW8',
+  'desi kalakaar': 'KhnVcAC5bIm',
   'blue eyes': 'NbyHNASFi6U',
-  'dope shope': 't0qI_01sLpQ',
+  'dope shope': 'NrXdauEv9HY',
   'brown rang': 'PqFMFVcCZgI',
   'high heels': 'kJqU9F2p6_4',
   'angreji beat': '2oMv4N1GkQk',
@@ -29,9 +29,9 @@ export const FAMOUS_SONGS_YOUTUBE = {
   'channa mereya': 'bzSTpdcs-EI',
   'shayad': 'mFvyb7Fj9_8',
   'agar tum saath ho': 'sK7riqg2mr4',
-  'tere vaste': 'VAdGW7QDJUI',
+  'tere vaste': 'VAdGW7QDJiU',
   'o maahi': '7c3-Ge36k3w',
-  'chaleya': 'VAdGW7QDJUI',
+  'chaleya': 'VAdGW7QDJiU',
   'heeriye': 'RLzC55ai0eo',
   'kahani suno': '_XBVWlI8TsQ',
   'pasoori': '5Eqb_-j3FDA',
@@ -42,7 +42,7 @@ export const FAMOUS_SONGS_YOUTUBE = {
   'zaalima': 'hhdSyH4QCqA',
   'hawayein': 'cYOB941gyXI',
 
-  // Global Hits
+  // Global & Hip Hop Hits
   'holocene': 'TWcyIpul8OE',
   'starboy': '34Na4j8AVgA',
   'blinding lights': '4NRXx6U8ABQ',
@@ -59,6 +59,34 @@ export const FAMOUS_SONGS_YOUTUBE = {
   'boom shak-a-lak': 'kZzBd41NuZw',
   'boom shakalak': 'kZzBd41NuZw',
   'boom shaka': 'kZzBd41NuZw',
+
+  // Desi Hip Hop & Rap hits
+  'machayenge 3': 'nJNooQDc0Bs',
+  'machayenge': 'nJNooQDc0Bs',
+  'machayenge 4': 'tWzCshc1oN4',
+  'say my name': 'd7m_c0w5z_o',
+  'no cap': 'O1mQn4P9z2w',
+  'makasam': 'JgZ3o8dD_Q0',
+  'hola amigo': 's_8xW_P6Yp0',
+  'prarthana': '8P6pT7ZzG5c',
+  'i guess': 'Y_JzW5vW_9w',
+  'roll up': '6_P2mK_xV8A',
+  'blow up': 'm9z8X8pQ2Y0',
+  'subhanallah': 'RCXB_7zPzYk',
+  'matargashti': '6vKucgAeF_Q',
+  'gallan goodiyan': 'jCEdTq3j-0U',
+  'dil dhadakne do': 'Bq5_mFz2K2s',
+  'sooraj dooba hain': 'nCg3ufihKyU',
+  'badtameez dil': 'II2EO3NwUr8',
+  'london thumakda': '0m3uU46QWrg',
+  'senorita': 't8n-C4_vC20',
+  'kho gaye hum kahan': 'vt4jX0iPU40',
+  'phir se udd chala': '2iqbx7Tzxbw',
+  'aazaadiyan': '01Qk9mHjC5E',
+  'bekhayali': 'VOLKJJvfAbg',
+  'tujhe bhula diya': '1y3wFvC9W2Q',
+  'phir bhi tumko chaahunga': '_aktURityQw',
+  'alvida': 'dD9l_s3l8eA',
 };
 
 /**

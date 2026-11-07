@@ -15,8 +15,17 @@ import {
   setVideoMode,
   playSongAtIndex,
   closePlayer,
+  moveQueueItem,
+  moveSongToNext,
+  removeFromQueue,
+  clearUpcomingQueue,
+  shuffleUpcomingQueue,
+  openVibeCard,
+  toggleSleepTimerModal,
+  toggleShortcutsModal,
 } from '../store/audioSlice';
 import { resolveMusicTheme } from '../utils/themeMap';
+import { resolveTrackArtwork, handleArtworkError } from '../utils/imageHelper';
 import AddToPlaylistButton from './AddToPlaylistButton';
 
 const formatTime = (seconds) => {
@@ -54,10 +63,113 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
     repeatMode,
     activeMood,
     isVideoMode,
+    sleepTimer,
   } = useSelector((state) => state.audio);
 
   const [isLiked, setIsLiked] = useState(false);
   const [playerTab, setPlayerTab] = useState(isVideoMode ? 'video' : 'vinyl');
+
+  // Customizable Queue drag & drop state
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [dropPosition, setDropPosition] = useState(null);
+  const [queueToast, setQueueToast] = useState(null);
+
+  const showQueueToast = (msg) => {
+    setQueueToast(msg);
+    setTimeout(() => setQueueToast(null), 3000);
+  };
+
+  const handleDragStart = (e, index) => {
+    e.dataTransfer.setData('text/plain', String(index));
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e, targetIdx) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedIndex === null || draggedIndex === targetIdx) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const pos = e.clientY < midY ? 'before' : 'after';
+    setDragOverIndex(targetIdx);
+    setDropPosition(pos);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+    setDropPosition(null);
+  };
+
+  const handleDrop = (e, targetIdx) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === targetIdx) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      setDropPosition(null);
+      return;
+    }
+
+    let destIdx = targetIdx;
+    if (dropPosition === 'after' && draggedIndex < targetIdx) {
+      destIdx = targetIdx;
+    } else if (dropPosition === 'before' && draggedIndex > targetIdx) {
+      destIdx = targetIdx;
+    } else if (dropPosition === 'after' && draggedIndex > targetIdx) {
+      destIdx = targetIdx + 1;
+    } else if (dropPosition === 'before' && draggedIndex < targetIdx) {
+      destIdx = targetIdx - 1;
+    }
+
+    const minUpcoming = Math.max(0, currentIndex + 1);
+    const maxUpcoming = queue.length - 1;
+    destIdx = Math.max(minUpcoming, Math.min(maxUpcoming, destIdx));
+
+    if (destIdx !== draggedIndex) {
+      dispatch(moveQueueItem({ fromIndex: draggedIndex, toIndex: destIdx }));
+      const trackName = queue[draggedIndex]?.name || 'Track';
+      const pos = destIdx - currentIndex;
+      showQueueToast(`✨ Moved "${trackName}" to #${pos} in queue`);
+    }
+
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+    setDropPosition(null);
+  };
+
+  const handleMoveUp = (idx, e) => {
+    e.stopPropagation();
+    if (idx <= currentIndex + 1) return;
+    dispatch(moveQueueItem({ fromIndex: idx, toIndex: idx - 1 }));
+    showQueueToast(`▲ Moved "${queue[idx]?.name}" up`);
+  };
+
+  const handleMoveDown = (idx, e) => {
+    e.stopPropagation();
+    if (idx >= queue.length - 1) return;
+    dispatch(moveQueueItem({ fromIndex: idx, toIndex: idx + 1 }));
+    showQueueToast(`▼ Moved "${queue[idx]?.name}" down`);
+  };
+
+  const handlePlayNextTrack = (idx, e) => {
+    e.stopPropagation();
+    dispatch(moveSongToNext(idx));
+    showQueueToast(`⚡ "${queue[idx]?.name}" will play next!`);
+  };
+
+  const handleRemoveTrack = (idx, e) => {
+    e.stopPropagation();
+    const trackName = queue[idx]?.name || 'Track';
+    dispatch(removeFromQueue(idx));
+    showQueueToast(`✕ Removed "${trackName}" from queue`);
+  };
+
+  const handleSelectQueueTrack = (idx) => {
+    dispatch(playSongAtIndex(idx));
+    setPlayerTab('vinyl'); // Instantly transition to spinning 12" Vinyl Model!
+    dispatch(setVideoMode(false));
+  };
 
   // Strict guideline: colors totally based on song's mood and genre when playing!
   const theme = resolveMusicTheme(currentSong, activeMood);
@@ -230,6 +342,43 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
             </button>
           </div>
 
+          {/* Feature 1: Sleep Timer */}
+          <button
+            onClick={() => dispatch(toggleSleepTimerModal())}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+              sleepTimer?.active
+                ? 'bg-indigo-600/30 text-indigo-300 border-indigo-400 shadow-sm'
+                : 'bg-obsidian-950/90 text-slate-400 hover:text-white border-white/10'
+            }`}
+            title="Sleep Timer (Press S)"
+          >
+            <span>🌙</span>
+            <span className="hidden sm:inline">
+              {sleepTimer?.active
+                ? (sleepTimer.isEndOfTrack ? 'Track' : `${Math.ceil(sleepTimer.remainingSeconds / 60)}m`)
+                : 'Timer'}
+            </span>
+          </button>
+
+          {/* Feature 5: Share Vibe Card */}
+          <button
+            onClick={() => dispatch(openVibeCard(currentSong))}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-obsidian-950/90 hover:bg-obsidian-800 text-slate-300 hover:text-white border border-white/10 text-xs font-bold transition-all cursor-pointer"
+            title="Generate Shareable Vibe Card (Press V)"
+          >
+            <span>📸</span>
+            <span className="hidden md:inline">Share Vibe</span>
+          </button>
+
+          {/* Feature 2: Keyboard Shortcuts Guide */}
+          <button
+            onClick={() => dispatch(toggleShortcutsModal())}
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-white bg-obsidian-950/90 hover:bg-obsidian-800 border border-white/10 transition-colors cursor-pointer text-xs font-bold"
+            title="Keyboard Shortcuts (Press ?)"
+          >
+            ⌨️
+          </button>
+
           <button
             onClick={handleClose}
             className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-white bg-obsidian-900/80 hover:bg-obsidian-800 border border-obsidian-750 transition-colors cursor-pointer"
@@ -255,27 +404,58 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
       {/* Main Showcase Stage: EITHER Queue List OR Vinyl/Video View */}
       {playerTab === 'queue' ? (
         <div className="w-full space-y-4 my-2 animate-fadeIn">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/10 gap-2">
+          {/* Header Controls for Customizable Queue View */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
             <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <span>Active Music Stream Queue</span>
-                <span
-                  className="text-[11px] font-mono px-2.5 py-0.5 rounded-full border"
-                  style={{
-                    color: moodColor,
-                    borderColor: `${moodColor}40`,
-                    backgroundColor: `${moodColor}15`,
-                  }}
-                >
-                  {queue.length} Tracks Loaded
-                </span>
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <span>Customizable Playback Queue</span>
+                  <span
+                    className="text-[11px] font-mono px-2.5 py-0.5 rounded-full border"
+                    style={{
+                      color: moodColor,
+                      borderColor: `${moodColor}40`,
+                      backgroundColor: `${moodColor}15`,
+                    }}
+                  >
+                    {Math.max(0, queue.length - (currentIndex + 1))} Upcoming Tracks
+                  </span>
+                </h3>
+              </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Click any track below to change playback instantly. Genre: <span style={{ color: moodColor }}>{theme.name}</span>.
+                Drag handle <span className="font-mono text-slate-300">⠿</span> to reorder • Use <span className="text-amber-400 font-semibold">⚡ Play Next</span> &amp; arrows to customize upcoming tracks.
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center flex-wrap gap-2">
+              {queue.length - (currentIndex + 1) > 1 && (
+                <button
+                  onClick={() => {
+                    dispatch(shuffleUpcomingQueue());
+                    showQueueToast('🔀 Upcoming queue shuffled!');
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-xs font-semibold transition-all hover:scale-102"
+                  title="Shuffle upcoming songs in queue"
+                >
+                  <span>🔀 Shuffle</span>
+                </button>
+              )}
+
+              {queue.length - (currentIndex + 1) > 0 && (
+                <button
+                  onClick={() => {
+                    if (confirm('Clear upcoming tracks from queue?')) {
+                      dispatch(clearUpcomingQueue());
+                      showQueueToast('🗑️ Cleared upcoming queue');
+                    }
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/25 text-xs font-semibold transition-all hover:scale-102"
+                  title="Clear upcoming songs"
+                >
+                  <span>🗑️ Clear</span>
+                </button>
+              )}
+
               <button
                 onClick={() => {
                   setPlayerTab('vinyl');
@@ -283,7 +463,7 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 border border-white/15 text-xs font-semibold transition-all hover:scale-102"
               >
-                <span>🎵 Return to Vinyl</span>
+                <span>🎵 Vinyl Disc</span>
               </button>
               <button
                 onClick={() => {
@@ -292,26 +472,46 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-all hover:scale-102"
               >
-                <span>🎬 Watch Video</span>
+                <span>🎬 Video</span>
               </button>
             </div>
           </div>
 
-          {/* Scrollable Queue Track List with Direct Track Changing */}
+          {/* Floating Queue Toast Notification */}
+          {queueToast && (
+            <div className="px-4 py-2 rounded-xl bg-obsidian-900 border border-cyan/40 text-cyan text-xs font-semibold shadow-lg animate-fadeIn flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-cyan animate-ping" />
+              <span>{queueToast}</span>
+            </div>
+          )}
+
+          {/* Scrollable Customizable Queue Track List with Drag & Drop */}
           <div className="max-h-[50vh] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
             {queue.map((song, idx) => {
               const isCurrent =
                 currentSong &&
                 (currentSong.id === song.id ||
                   (currentSong.name === song.name && currentSong.artist === song.artist));
+              const isUpcoming = idx > currentIndex;
+              const isPast = idx < currentIndex;
+              const isDragOver = dragOverIndex === idx;
 
               return (
                 <div
                   key={song.id || `${song.name}-${idx}`}
-                  onClick={() => dispatch(playSongAtIndex(idx))}
-                  className={`group flex items-center justify-between p-3 rounded-2xl transition-all cursor-pointer border ${
+                  onClick={() => handleSelectQueueTrack(idx)}
+                  draggable={isUpcoming}
+                  onDragStart={(e) => isUpcoming && handleDragStart(e, idx)}
+                  onDragOver={(e) => isUpcoming && handleDragOver(e, idx)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => isUpcoming && handleDrop(e, idx)}
+                  className={`group relative flex items-center justify-between p-3 rounded-2xl transition-all cursor-pointer border ${
                     isCurrent
                       ? 'border-cyan/40 shadow-lg'
+                      : isDragOver
+                      ? dropPosition === 'before'
+                        ? 'border-t-2 border-cyan bg-cyan/10'
+                        : 'border-b-2 border-cyan bg-cyan/10'
                       : 'bg-obsidian-900/60 hover:bg-obsidian-800/80 border-white/5 hover:border-white/15'
                   }`}
                   style={{
@@ -319,37 +519,61 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
                     backgroundColor: isCurrent ? `${moodColor}20` : undefined,
                   }}
                 >
-                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                    {/* Index / Equalizer */}
-                    <div className="w-7 flex items-center justify-center flex-shrink-0">
-                      {isCurrent && isPlaying ? (
-                        <div className="flex items-end gap-0.5 h-3.5">
-                          <span className="w-1 rounded-full animate-bounce h-full" style={{ backgroundColor: moodColor }} />
-                          <span className="w-1 rounded-full animate-bounce [animation-delay:-0.15s] h-2/3" style={{ backgroundColor: moodColor }} />
-                          <span className="w-1 rounded-full animate-bounce [animation-delay:-0.3s] h-4/5" style={{ backgroundColor: moodColor }} />
+                  <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 flex-1">
+                    {/* Reorder / Drag Handle OR Equalizer / Track Index */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {isUpcoming ? (
+                        <div
+                          className="cursor-grab active:cursor-grabbing p-1.5 text-slate-500 hover:text-white transition-colors flex items-center justify-center select-none"
+                          title="Drag up or down to customize queue position"
+                        >
+                          <svg className="w-4 h-4 fill-current opacity-70 group-hover:opacity-100" viewBox="0 0 24 24">
+                            <circle cx="8.5" cy="6" r="1.5" />
+                            <circle cx="15.5" cy="6" r="1.5" />
+                            <circle cx="8.5" cy="12" r="1.5" />
+                            <circle cx="15.5" cy="12" r="1.5" />
+                            <circle cx="8.5" cy="18" r="1.5" />
+                            <circle cx="15.5" cy="18" r="1.5" />
+                          </svg>
                         </div>
                       ) : (
-                        <span
-                          className={`text-xs font-mono ${isCurrent ? 'font-bold' : 'text-slate-500 group-hover:text-white'}`}
-                          style={{ color: isCurrent ? moodColor : undefined }}
-                        >
-                          #{idx + 1}
-                        </span>
+                        <div className="w-4" />
                       )}
+
+                      <div className="w-7 text-center">
+                        {isCurrent && isPlaying ? (
+                          <div className="flex items-end gap-0.5 h-3.5 justify-center">
+                            <span className="w-1 rounded-full animate-bounce h-full" style={{ backgroundColor: moodColor }} />
+                            <span className="w-1 rounded-full animate-bounce [animation-delay:-0.15s] h-2/3" style={{ backgroundColor: moodColor }} />
+                            <span className="w-1 rounded-full animate-bounce [animation-delay:-0.3s] h-4/5" style={{ backgroundColor: moodColor }} />
+                          </div>
+                        ) : (
+                          <span
+                            className={`text-xs font-mono ${isCurrent ? 'font-bold' : isUpcoming ? 'text-slate-300 font-bold' : 'text-slate-500'}`}
+                            style={{ color: isCurrent ? moodColor : undefined }}
+                          >
+                            {isUpcoming ? `#${idx - currentIndex}` : isCurrent ? '▶' : `-${currentIndex - idx}`}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Artwork */}
+                    {/* Artwork with guaranteed resolver */}
                     <img
-                      src={song.image || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&auto=format&fit=crop&q=80'}
+                      src={resolveTrackArtwork(song)}
                       alt={song.name}
-                      className="w-11 h-11 rounded-xl object-cover bg-obsidian-950 flex-shrink-0 shadow-md"
-                      onError={(e) => {
-                        e.target.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&auto=format&fit=crop&q=80';
-                      }}
+                      className="w-11 h-11 rounded-xl object-cover bg-obsidian-950 flex-shrink-0 shadow-md cursor-pointer hover:scale-105 transition-transform"
+                      onClick={() => handleSelectQueueTrack(idx)}
+                      title="Click to play now"
+                      onError={(e) => handleArtworkError(e, song)}
                     />
 
                     {/* Title & Artist */}
-                    <div className="min-w-0 flex-1">
+                    <div
+                      className="min-w-0 flex-1 cursor-pointer"
+                      onClick={() => handleSelectQueueTrack(idx)}
+                      title="Click to play now"
+                    >
                       <div className="flex items-center gap-2">
                         <h4
                           className={`text-xs sm:text-sm font-bold truncate transition-colors ${
@@ -360,10 +584,19 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
                         </h4>
                         {isCurrent && (
                           <span
-                            className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-white/10 uppercase font-bold"
-                            style={{ color: moodColor }}
+                            className="text-[9px] font-mono px-1.5 py-0.2 rounded-md uppercase font-bold"
+                            style={{
+                              color: moodColor,
+                              backgroundColor: `${moodColor}25`,
+                              border: `1px solid ${moodColor}40`,
+                            }}
                           >
                             Playing Now
+                          </span>
+                        )}
+                        {isUpcoming && idx === currentIndex + 1 && (
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 uppercase font-bold">
+                            Next Up
                           </span>
                         )}
                       </div>
@@ -373,8 +606,61 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
                     </div>
                   </div>
 
-                  {/* Right: Mood/Genre & Duration */}
-                  <div className="flex items-center gap-3 flex-shrink-0 ml-3">
+                  {/* Right: Customizable Queue Reorder Controls & Duration */}
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 ml-2">
+                    {/* 1-Click Move Up / Down Controls for Upcoming Queue */}
+                    {isUpcoming && (
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        {/* Play Next (⚡) */}
+                        {idx > currentIndex + 1 && (
+                          <button
+                            onClick={(e) => handlePlayNextTrack(idx, e)}
+                            className="px-2 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold transition-all hover:scale-105"
+                            title="Make this track play immediately next"
+                          >
+                            ⚡ Next
+                          </button>
+                        )}
+
+                        {/* Move Up (▲) */}
+                        <button
+                          onClick={(e) => handleMoveUp(idx, e)}
+                          disabled={idx <= currentIndex + 1}
+                          className={`p-1.5 rounded-lg text-xs transition-all ${
+                            idx <= currentIndex + 1
+                              ? 'text-slate-600 cursor-not-allowed opacity-30'
+                              : 'text-slate-400 hover:text-white hover:bg-white/10 hover:scale-110'
+                          }`}
+                          title="Move track up in queue"
+                        >
+                          ▲
+                        </button>
+
+                        {/* Move Down (▼) */}
+                        <button
+                          onClick={(e) => handleMoveDown(idx, e)}
+                          disabled={idx >= queue.length - 1}
+                          className={`p-1.5 rounded-lg text-xs transition-all ${
+                            idx >= queue.length - 1
+                              ? 'text-slate-600 cursor-not-allowed opacity-30'
+                              : 'text-slate-400 hover:text-white hover:bg-white/10 hover:scale-110'
+                          }`}
+                          title="Move track down in queue"
+                        >
+                          ▼
+                        </button>
+
+                        {/* Remove from Queue (✕) */}
+                        <button
+                          onClick={(e) => handleRemoveTrack(idx, e)}
+                          className="p-1.5 rounded-lg text-xs text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                          title="Remove from queue"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+
                     <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-obsidian-950 text-slate-400 border border-white/10 capitalize">
                       {song.mood_match || song.genre || 'Stream'}
                     </span>
@@ -383,8 +669,10 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
                       {formatTime(song.duration)}
                     </span>
 
+                    {/* Play Track button */}
                     <button
-                      className="p-2 rounded-xl text-slate-400 group-hover:text-white group-hover:scale-110 transition-transform"
+                      onClick={() => handleSelectQueueTrack(idx)}
+                      className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 hover:scale-110 transition-transform"
                       style={{ color: isCurrent ? moodColor : undefined }}
                       title="Play track now"
                     >
@@ -490,22 +778,10 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
                   {/* Center Album Art Label */}
                   <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden border-4 border-obsidian-950 shadow-inner flex items-center justify-center bg-obsidian-900">
                     <img
-                      src={
-                        currentSong.image && !currentSong.image.includes('1511671782779')
-                          ? currentSong.image
-                          : (currentSong.youtube_id
-                              ? `https://i.ytimg.com/vi/${currentSong.youtube_id}/hqdefault.jpg`
-                              : `https://ui-avatars.com/api/?name=${encodeURIComponent(currentSong.name || 'Song')}&background=0f172a&color=38bdf8&size=200&font-size=0.35&bold=true`)
-                      }
+                      src={resolveTrackArtwork(currentSong)}
                       alt={currentSong.name}
                       className="w-full h-full object-cover"
-                      onError={(e) => {
-                        if (currentSong.youtube_id && !e.target.src.includes('ytimg.com')) {
-                          e.target.src = `https://i.ytimg.com/vi/${currentSong.youtube_id}/hqdefault.jpg`;
-                        } else {
-                          e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentSong.name || 'Song')}&background=0f172a&color=38bdf8&size=200&font-size=0.35&bold=true`;
-                        }
-                      }}
+                      onError={(e) => handleArtworkError(e, currentSong)}
                     />
                     {/* Center Spindle Hole */}
                     <div className="absolute w-4 h-4 rounded-full bg-obsidian-950 border-2 border-white/40 shadow-inner" />

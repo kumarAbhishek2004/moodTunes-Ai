@@ -12,6 +12,8 @@ if sys.platform == "win32":
     except Exception:
         pass
 
+import re
+import urllib.parse
 from motor.motor_asyncio import AsyncIOMotorClient
 from typing import Optional
 from datetime import datetime
@@ -21,16 +23,35 @@ from bson import ObjectId
 from bson.errors import InvalidId
 
 load_dotenv()
+_backend_env = os.path.join(os.path.dirname(__file__), "..", ".env")
+if os.path.exists(_backend_env):
+    load_dotenv(_backend_env)
+
 
 # Fix for Docker / Hugging Face Spaces: public DNS fallback for mongodb+srv records
 try:
     import dns.resolver
     dns.resolver.default_resolver = dns.resolver.Resolver(configure=False)
     dns.resolver.default_resolver.nameservers = ['8.8.8.8', '1.1.1.1', '8.8.4.4']
+    dns.resolver.default_resolver.lifetime = 2.0
+    dns.resolver.default_resolver.timeout = 2.0
 except Exception:
     pass
 
-MONGODB_URL = os.getenv("MONGODB_URL", None)
+def sanitize_mongodb_url(raw_url: Optional[str]) -> Optional[str]:
+    """Ensure password special characters like '@' are safely percent-encoded."""
+    if not raw_url:
+        return raw_url
+    raw_url = raw_url.strip()
+    m = re.match(r'^(mongodb(?:\+srv)?://)([^:]+):(.*)@([^@/]+)(.*)$', raw_url)
+    if m:
+        scheme, user, password, host, rest = m.groups()
+        if '@' in password:
+            enc_password = urllib.parse.quote_plus(password)
+            return f"{scheme}{user}:{enc_password}@{host}{rest}"
+    return raw_url
+
+MONGODB_URL = sanitize_mongodb_url(os.getenv("MONGODB_URL", None))
 DATABASE_NAME = os.getenv("DATABASE_NAME", "moodtunes_ai")
 
 # Global client + database
@@ -46,15 +67,27 @@ async def connect_to_mongodb():
         return
 
     try:
-        _client = AsyncIOMotorClient(MONGODB_URL, serverSelectionTimeoutMS=2000)
+        _client = AsyncIOMotorClient(
+            MONGODB_URL,
+            serverSelectionTimeoutMS=3000,
+            connectTimeoutMS=3000,
+            socketTimeoutMS=3000
+        )
         _database = _client[DATABASE_NAME]
-        # test connection with short timeout
-        await _client.admin.command("ping")
-        # indexes
-        await _database.users.create_index("email", unique=True)
-        print(f"✅ Connected to MongoDB: {DATABASE_NAME}")
+        # Test connection on database directly (avoids admin database privilege restrictions)
+        try:
+            await _database.command("ping")
+        except Exception:
+            await _client.admin.command("ping")
+        # Ensure indexes
+        try:
+            await _database.users.create_index("email", unique=True)
+            await _database.playlists.create_index("user_id")
+        except Exception:
+            pass
+        print(f"✅ Connected to MongoDB Atlas: {DATABASE_NAME}")
     except Exception as e:
-        print(f"⚠️  MongoDB connection failed: {e}. Auth and DB playlists will be unavailable.")
+        print(f"⚠️  MongoDB connection note: {e}. Persistent local disk storage active.")
         _database = None
 
 async def close_mongodb_connection():

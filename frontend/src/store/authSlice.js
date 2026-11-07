@@ -21,6 +21,20 @@ const initialState = {
   isLoading: false,
   isAuthenticated: !!tokenFromStorage,
   error: null,
+  signupSuccess: false,
+};
+
+const formatAuthError = (error, defaultMsg) => {
+  const detail = error.response?.data?.detail;
+  if (!detail) return defaultMsg;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((d) => d.msg || d.message || JSON.stringify(d)).join('. ');
+  }
+  if (typeof detail === 'object') {
+    return detail.msg || detail.message || JSON.stringify(detail);
+  }
+  return String(detail);
 };
 
 // Async thunks
@@ -31,7 +45,7 @@ export const signup = createAsyncThunk(
       const response = await axios.post(`${API_URL}/auth/signup`, userData);
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.detail || 'Signup failed');
+      return rejectWithValue(formatAuthError(error, 'Signup failed'));
     }
   }
 );
@@ -43,7 +57,7 @@ export const login = createAsyncThunk(
       const response = await axios.post(`${API_URL}/auth/login`, credentials);
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.detail || 'Login failed');
+      return rejectWithValue(formatAuthError(error, 'Login failed'));
     }
   }
 );
@@ -60,6 +74,25 @@ const authSlice = createSlice({
   reducers: {
     clearError: (state) => {
       state.error = null;
+    },
+    clearSignupSuccess: (state) => {
+      state.signupSuccess = false;
+    },
+    continueAsGuest: (state) => {
+      state.isLoading = false;
+      state.isAuthenticated = true;
+      state.user = {
+        id: 'guest-user',
+        full_name: 'Guest Listener',
+        email: 'guest@moodtunes.ai',
+        isGuest: true,
+      };
+      state.token = 'guest-session-token';
+      state.error = null;
+      try {
+        localStorage.setItem('user', JSON.stringify(state.user));
+        localStorage.setItem('token', 'guest-session-token');
+      } catch (e) {}
     },
     setCredentials: (state, action) => {
       state.isLoading = false;
@@ -81,13 +114,11 @@ const authSlice = createSlice({
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(signup.fulfilled, (state, action) => {
+      .addCase(signup.fulfilled, (state) => {
         state.isLoading = false;
-        state.isAuthenticated = true;
-        state.user = action.payload.user;
-        state.token = action.payload.access_token;
-        localStorage.setItem('user', JSON.stringify(action.payload.user));
-        localStorage.setItem('token', action.payload.access_token);
+        state.isAuthenticated = false;
+        state.error = null;
+        state.signupSuccess = true;
       })
       .addCase(signup.rejected, (state, action) => {
         state.isLoading = false;
@@ -119,5 +150,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, setCredentials } = authSlice.actions;
+export const { clearError, setCredentials, continueAsGuest } = authSlice.actions;
 export default authSlice.reducer;

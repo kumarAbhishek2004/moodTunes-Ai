@@ -15,6 +15,10 @@ import jwt
 from dotenv import load_dotenv
 
 load_dotenv()
+_backend_env = os.path.join(os.path.dirname(__file__), "..", ".env")
+if os.path.exists(_backend_env):
+    load_dotenv(_backend_env)
+
 
 # ---------------------------------------------------------
 # PASSWORD HASHING (FINAL – NO BCRYPT)
@@ -35,19 +39,20 @@ security = HTTPBearer()
 # MODELS
 # ---------------------------------------------------------
 class UserSignup(BaseModel):
-    email: EmailStr
-    password: str = Field(..., min_length=6)
-    full_name: str = Field(..., min_length=2)
+    email: str
+    password: str
+    full_name: Optional[str] = None
+    name: Optional[str] = None
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 class UserResponse(BaseModel):
     id: str
-    email: EmailStr
-    full_name: str
-    created_at: str
+    email: str
+    full_name: str = ""
+    created_at: str = ""
 
 class TokenResponse(BaseModel):
     access_token: str

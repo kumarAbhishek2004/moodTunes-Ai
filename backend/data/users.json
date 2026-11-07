@@ -1,0 +1,23 @@
+{
+  "persistent_test@example.com": {
+    "id": "user_1794096797_9f295a",
+    "email": "persistent_test@example.com",
+    "password": "$pbkdf2-sha256$29000$8v7/P4cw5rzXWss5Z6yVkg$UXWh7/7tlwzi0xsk1hT5sOR91JhSMaSdam5toOxznxA",
+    "full_name": "Abhishek Test",
+    "created_at": "2026-11-08T05:43:17.421889"
+  },
+  "valid_test_99@example.com": {
+    "id": "6af067ba84a5c9baa617c83e",
+    "email": "valid_test_99@example.com",
+    "password": "$pbkdf2-sha256$29000$3JsTAqD0fo9xzjmnNCbknA$n5CmLPv0tlX/99cHWOvcGuEgwuHnWw2HZ69NYxyxztw",
+    "full_name": "Valid User",
+    "created_at": "2026-11-08T12:14:50.743206"
+  },
+  "abhi2@gmail.com": {
+    "id": "user_1794133687_c66785",
+    "email": "abhi2@gmail.com",
+    "password": "$pbkdf2-sha256$29000$ek9prRUipNR6L4WQUqoV4g$.tPswGZAp/VS6L8CDrvmGMu42/FguM9/edT/y.S0GA4",
+    "full_name": "prem choudhary",
+    "created_at": "2026-11-08T15:58:07.552583"
+  }
+}

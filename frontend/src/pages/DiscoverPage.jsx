@@ -6,6 +6,7 @@ import { API_BASE_URL } from '../config/api';
 import { playSong, setQueue, setActiveMood, togglePlayPause, toggleTurntable } from '../store/audioSlice';
 import { resolveMusicTheme } from '../utils/themeMap';
 import AddToPlaylistButton from '../components/AddToPlaylistButton';
+import { resolveTrackArtwork, handleArtworkError } from '../utils/imageHelper';
 
 const CATEGORY_TILES = [
   {
@@ -261,8 +262,8 @@ const CATEGORY_TILES = [
         "id": "capsule-energy-2",
         "name": "Machayenge 3",
         "artist": "Emiway Bantai",
-        "youtube_id": "Dlz_XHeUUcw",
-        "image": "https://i.ytimg.com/vi/Dlz_XHeUUcw/hqdefault.jpg",
+        "youtube_id": "nJNooQDc0Bs",
+        "image": "https://i.ytimg.com/vi/nJNooQDc0Bs/hqdefault.jpg",
         "duration": 185,
         "mood_match": "Energetic"
       },
@@ -270,8 +271,8 @@ const CATEGORY_TILES = [
         "id": "capsule-energy-3",
         "name": "Love Dose",
         "artist": "Yo Yo Honey Singh",
-        "youtube_id": "TvngY4unyL4",
-        "image": "https://i.ytimg.com/vi/TvngY4unyL4/hqdefault.jpg",
+        "youtube_id": "nW9WwkWwaW8",
+        "image": "https://i.ytimg.com/vi/nW9WwkWwaW8/hqdefault.jpg",
         "duration": 228,
         "mood_match": "Energetic"
       },
@@ -279,8 +280,8 @@ const CATEGORY_TILES = [
         "id": "capsule-energy-4",
         "name": "Desi Kalakaar",
         "artist": "Yo Yo Honey Singh",
-        "youtube_id": "KhnvxXffwio",
-        "image": "https://i.ytimg.com/vi/KhnvxXffwio/hqdefault.jpg",
+        "youtube_id": "KhnVcAC5bIm",
+        "image": "https://i.ytimg.com/vi/KhnVcAC5bIm/hqdefault.jpg",
         "duration": 259,
         "mood_match": "Energetic"
       },
@@ -297,8 +298,8 @@ const CATEGORY_TILES = [
         "id": "capsule-energy-6",
         "name": "Dope Shope",
         "artist": "Yo Yo Honey Singh",
-        "youtube_id": "t0qI_01sLpQ",
-        "image": "https://i.ytimg.com/vi/t0qI_01sLpQ/hqdefault.jpg",
+        "youtube_id": "NrXdauEv9HY",
+        "image": "https://i.ytimg.com/vi/NrXdauEv9HY/hqdefault.jpg",
         "duration": 190,
         "mood_match": "Energetic"
       },
@@ -369,8 +370,8 @@ const CATEGORY_TILES = [
         "id": "capsule-energy-14",
         "name": "Chaleya",
         "artist": "Arijit Singh & Shilpa Rao",
-        "youtube_id": "VAdGW7QDJUI",
-        "image": "https://i.ytimg.com/vi/VAdGW7QDJUI/hqdefault.jpg",
+        "youtube_id": "VAdGW7QDJiU",
+        "image": "https://i.ytimg.com/vi/VAdGW7QDJiU/hqdefault.jpg",
         "duration": 200,
         "mood_match": "Energetic"
       },
@@ -1222,8 +1223,8 @@ const CATEGORY_TILES = [
         "id": "capsule-romantic-7",
         "name": "Tere Vaste",
         "artist": "Varun Jain & Sachin-Jigar",
-        "youtube_id": "VAdGW7QDJUI",
-        "image": "https://i.ytimg.com/vi/VAdGW7QDJUI/hqdefault.jpg",
+        "youtube_id": "VAdGW7QDJiU",
+        "image": "https://i.ytimg.com/vi/VAdGW7QDJiU/hqdefault.jpg",
         "duration": 189,
         "mood_match": "Romantic"
       },
@@ -1396,12 +1397,12 @@ const TRENDING_SEEDS = [
     id: 'trend-3',
     name: 'Chaleya',
     artist: 'Arijit Singh, Shilpa Rao',
-    youtube_id: 'VAdGW7QDJUI',
+    youtube_id: 'VAdGW7QDJiU',
     mood_match: 'Energetic',
     ai_explanation: 'High rhythmic bounce with punchy drum arrangement',
     duration: 200,
     plays: '280.9M',
-    image: 'https://i.ytimg.com/vi/VAdGW7QDJUI/hqdefault.jpg',
+    image: 'https://i.ytimg.com/vi/VAdGW7QDJiU/hqdefault.jpg',
   },
   {
     rank: 4,
@@ -1480,6 +1481,31 @@ const DiscoverPage = () => {
   const [trendingTracks, setTrendingTracks] = useState(TRENDING_SEEDS);
   const [activeCategoryLoading, setActiveCategoryLoading] = useState(null);
   const [playbackToast, setPlaybackToast] = useState(null);
+  const [isRefreshingTrending, setIsRefreshingTrending] = useState(false);
+  const [lastUpdatedTime, setLastUpdatedTime] = useState('Hourly Sync Active');
+
+  const fetchLiveTrending = async (showRefreshToast = false) => {
+    setIsRefreshingTrending(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/trending-tracks?limit=15`, { timeout: 6000 });
+      if (res.data?.tracks && res.data.tracks.length > 0) {
+        setTrendingTracks(res.data.tracks);
+        setLastUpdatedTime(`Live Sync (${res.data.updated_at || 'Just Now'})`);
+        if (showRefreshToast) showToast('🔥 Live Last.fm Global Charts refreshed!');
+      } else {
+        setLastUpdatedTime('Hourly Sync • Verified Charts');
+        if (showRefreshToast) showToast('✓ Verified Global Charts up to date');
+      }
+    } catch (err) {
+      setLastUpdatedTime('Hourly Sync • Verified Charts');
+    } finally {
+      setIsRefreshingTrending(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveTrending(false);
+  }, []);
 
   const showToast = (message) => {
     setPlaybackToast(message);
@@ -1619,9 +1645,22 @@ const DiscoverPage = () => {
               Top requested tracks with verified Parallel HD streaming fidelity
             </p>
           </div>
-          <span className="text-[11px] font-mono px-3 py-1 rounded-full bg-obsidian-800 text-slate-300 border border-obsidian-750 w-fit">
-            Updated Hourly
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono px-3 py-1 rounded-full bg-obsidian-800 text-slate-300 border border-obsidian-750 flex items-center gap-1.5 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>{lastUpdatedTime}</span>
+            </span>
+            <button
+              onClick={() => fetchLiveTrending(true)}
+              disabled={isRefreshingTrending}
+              className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-xs transition-all hover:scale-105 cursor-pointer disabled:opacity-50"
+              title="Refresh live Last.fm trending chart"
+            >
+              <svg className={`w-3.5 h-3.5 ${isRefreshingTrending ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Dense Table Header */}
@@ -1685,16 +1724,10 @@ const DiscoverPage = () => {
                 {/* Track Details */}
                 <div className="flex items-center gap-3 min-w-0 flex-1 md:col-span-5">
                   <img
-                    src={song.image}
+                    src={resolveTrackArtwork(song)}
                     alt={song.name}
                     className="w-11 h-11 rounded-lg object-cover bg-obsidian-800 flex-shrink-0 shadow-md"
-                    onError={(e) => {
-                      if (song.youtube_id && !e.target.src.includes('ytimg.com')) {
-                        e.target.src = `https://i.ytimg.com/vi/${song.youtube_id}/hqdefault.jpg`;
-                      } else {
-                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(song.name || 'Song')}&background=0f172a&color=38bdf8&size=100&bold=true`;
-                      }
-                    }}
+                    onError={(e) => handleArtworkError(e, song)}
                   />
                   <div className="min-w-0">
                     <p

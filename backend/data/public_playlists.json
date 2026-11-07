@@ -1,0 +1,26 @@
+{
+  "test_user": [
+    {
+      "id": "pl_test_persisted",
+      "name": "Test Persisted Playlist",
+      "songs": [
+        {
+          "id": "s1",
+          "name": "Song One",
+          "artist": "Artist One",
+          "lastfm_url": null,
+          "youtube_id": null,
+          "preview_url": null,
+          "album": null,
+          "duration_ms": null,
+          "listeners": null,
+          "playcount": null,
+          "tags": [],
+          "audio_features": {},
+          "ai_explanation": null,
+          "mood_match": null
+        }
+      ]
+    }
+  ]
+}

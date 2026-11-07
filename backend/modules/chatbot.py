@@ -324,8 +324,22 @@ Remember: Always use standard ASCII hyphen (-) between song and artist. Always i
             # Check for PLAY command (direct playback)
             play_command = self.extract_play_command(bot_response)
 
-            # Check for PLAYLIST command
+            # Check for PLAYLIST command from LLM response or directly from user intent
             playlist_name = self.extract_playlist_command(bot_response)
+            if not playlist_name:
+                cleaned_user = user_message.strip().lower()
+                # 1. General "play music from my playlist" / "play my playlist" / "play from playlist"
+                if re.search(r'\b(?:play|start|listen to)\s+(?:music\s+)?(?:from\s+)?(?:my\s+)?(?:the\s+)?playlist\b', user_message, re.IGNORECASE):
+                    playlist_name = "auto"
+                else:
+                    # 2. "play playlist [name]" or "play [name] playlist"
+                    m_pl = re.search(r'\b(?:play|start|listen to)\s+(?:my\s+)?playlist\s+([a-zA-Z0-9\s_\-]+)', user_message, re.IGNORECASE)
+                    if not m_pl:
+                        m_pl = re.search(r'\b(?:play|start|listen to)\s+(?:my\s+)?([a-zA-Z0-9_\-]+)\s+playlist\b', user_message, re.IGNORECASE)
+                    if m_pl:
+                        cand = m_pl.group(1).strip()
+                        if cand.lower() not in ["a", "the", "some", "my", "this", "that", "music"]:
+                            playlist_name = cand
 
             # Extract recommendations
             recommendations = self.extract_recommendations(bot_response)

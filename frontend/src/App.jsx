@@ -13,6 +13,7 @@ import MoodDetectionPage from './pages/MoodDetectionPage';
 import PreferencesPage from './pages/PreferencesPage';
 import RecommendationsPage from './pages/RecommendationsPage';
 import MusicPlayerPage from './pages/MusicPlayerPage';
+import AboutPage from './pages/AboutPage';
 
 function App() {
   return (
@@ -32,6 +33,7 @@ function App() {
               {/* Auth & Features */}
               <Route path="/login" element={<LoginPage />} />
               <Route path="/playlists" element={<PlaylistsPage />} />
+              <Route path="/about" element={<AboutPage />} />
             </Routes>
           </AppShell>
         </Router>

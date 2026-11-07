@@ -1,12 +1,22 @@
+import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useLocation } from 'react-router-dom';
-import { toggleTurntable } from '../store/audioSlice';
+import { toggleTurntable, playSong, setQueue } from '../store/audioSlice';
 import { resolveMusicTheme } from '../utils/themeMap';
+import { playSongWithSimilarQueue } from '../utils/queueHelper';
 import PersistentAudioEngine from './PersistentAudioEngine';
 import HorizontalNavbar from './HorizontalNavbar';
 import BottomPlayer from './BottomPlayer';
 import QueueDrawer from './QueueDrawer';
 import TurntablePlayer from './TurntablePlayer';
+import Chatbot from './Chatbot';
+import SleepTimerModal from './SleepTimerModal';
+import ShortcutsModal from './ShortcutsModal';
+import MoodElevationToast from './MoodElevationToast';
+import VibeCardModal from './VibeCardModal';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { checkAndTriggerMoodElevation } from '../utils/moodElevationEngine';
+import { useEffect } from 'react';
 
 export const MOOD_GLOW_MAP = {
   calm: {
@@ -68,14 +78,30 @@ export const MOOD_GLOW_MAP = {
 const AppShell = ({ children }) => {
   const dispatch = useDispatch();
   const location = useLocation();
+  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
   const currentSong = useSelector((state) => state.audio.currentSong);
   const activeMood = useSelector((state) => state.audio.activeMood) || 'happy';
   const isTurntableOpen = useSelector((state) => state.audio.isTurntableOpen);
   
   // Strict guideline: When music is playing, colors dynamically adapt to song's mood and genre!
   const glow = resolveMusicTheme(currentSong, activeMood);
-
   const isAuthRoute = location.pathname === '/login';
+
+  // Feature 2: Global Keyboard Shortcuts Hook
+  const { toastMessage: shortcutToast } = useKeyboardShortcuts();
+
+  // Feature 4: Smart Mood Elevation Trigger (AI DJ Mode)
+  const playbackHistory = useSelector((state) => state.audio.playbackHistory);
+  const smartMoodElevation = useSelector((state) => state.audio.smartMoodElevation);
+  const queue = useSelector((state) => state.audio.queue);
+
+  useEffect(() => {
+    if (currentSong && playbackHistory?.length >= 3) {
+      checkAndTriggerMoodElevation(dispatch, {
+        audio: { playbackHistory, currentSong, smartMoodElevation, queue },
+      });
+    }
+  }, [currentSong?.id, playbackHistory?.length]);
 
   return (
     <div
@@ -129,6 +155,42 @@ const AppShell = ({ children }) => {
 
           {/* Slide-out Queue Drawer */}
           <QueueDrawer />
+
+          {/* Global Floating Aura AI Chatbot Copilot (Available across every page) */}
+          <Chatbot
+            isOpen={isChatbotOpen}
+            onToggle={() => setIsChatbotOpen((prev) => !prev)}
+            currentMood={activeMood}
+            onPlaySong={(song) => {
+              playSongWithSimilarQueue(dispatch, song, 10);
+            }}
+            onPlayPlaylist={(playlist) => {
+              if (playlist?.songs?.length > 0) {
+                dispatch(setQueue(playlist.songs));
+                dispatch(playSong(playlist.songs[0]));
+              }
+            }}
+          />
+
+          {/* Feature 1: Sleep Timer Modal */}
+          <SleepTimerModal />
+
+          {/* Feature 2: Keyboard Shortcuts Help Modal */}
+          <ShortcutsModal />
+
+          {/* Feature 4: Smart Mood Elevation Toast Banner */}
+          <MoodElevationToast />
+
+          {/* Feature 5: Shareable Vibe Card Modal */}
+          <VibeCardModal />
+
+          {/* Keyboard Shortcut Active Feedback Pill */}
+          {shortcutToast && (
+            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 py-1.5 px-4 rounded-full bg-obsidian-950/95 border border-white/20 text-white text-xs font-mono font-bold shadow-2xl backdrop-blur-xl animate-fadeIn pointer-events-none flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-cyan animate-pulse" />
+              <span>{shortcutToast}</span>
+            </div>
+          )}
 
           {/* Fullscreen Vinyl Turntable Modal (Expanded Interface) */}
           {isTurntableOpen && (
