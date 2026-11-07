@@ -111,6 +111,7 @@ class PlaylistCreateAuth(BaseModel):
     name: str
     description: str = ""
     mood: Optional[str] = None
+    cover: Optional[str] = None
     songs: List[Song] = Field(default_factory=list)
     is_public: bool = False
 
@@ -118,6 +119,7 @@ class PlaylistUpdateAuth(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     mood: Optional[str] = None
+    cover: Optional[str] = None
     songs: Optional[List[Song]] = None
     is_public: Optional[bool] = None
 

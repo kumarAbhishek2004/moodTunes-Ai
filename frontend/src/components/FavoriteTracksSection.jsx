@@ -163,6 +163,247 @@ export const MOOD_TABS = [
   { key: 'sad', label: 'Reflective', emoji: '🌧️', color: '#3B82F6', badge: 'bg-blue-500/10 text-blue-300 border-blue-500/30' },
 ];
 
+
+// Curated comprehensive catalog for instant client-side typo-tolerant fuzzy search
+const CLIENT_TRANSLITERATIONS = {
+  krsna: 'krsna',
+  'kr$na': 'krsna',
+  krishna: 'krsna',
+  'boom shaka': 'boom shack a lak',
+  'boom shakalak': 'boom shack a lak',
+  'boom shack': 'boom shack a lak',
+  kasariya: 'kesariya',
+  kesriya: 'kesariya',
+  kesari: 'kesariya',
+  arjit: 'arijit',
+  'arjit singh': 'arijit singh',
+  ratan: 'raataan',
+  raatan: 'raataan',
+  'ratan lambiyan': 'raataan lambiyan',
+  'raatan lambiyan': 'raataan lambiyan',
+  beliver: 'believer',
+  iktara: 'iktara',
+  'ik tara': 'iktara',
+  'channa merya': 'channa mereya',
+  'apna bna le': 'apna bana le',
+  'apna banale': 'apna bana le',
+  weekend: 'the weeknd',
+  weeknd: 'the weeknd',
+  badsa: 'badshah',
+  'dil nu': 'dil nu',
+  'dill nu': 'dil nu',
+  'honey sing': 'yo yo honey singh',
+  'maan meri jan': 'maan meri jaan',
+};
+
+const normalizeForFuzzy = (str = '') => {
+  let s = String(str).toLowerCase().replace(/\$/g, 's').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  for (const [k, v] of Object.entries(CLIENT_TRANSLITERATIONS)) {
+    if (s.includes(k)) {
+      s = s.replace(new RegExp(`\\b${k}\\b`, 'g'), v);
+    }
+  }
+  return s;
+};
+
+const getSimilarityRatio = (s1, s2) => {
+  if (s1 === s2) return 1.0;
+  if (!s1 || !s2) return 0.0;
+  const longer = s1.length > s2.length ? s1 : s2;
+  const shorter = s1.length > s2.length ? s2 : s1;
+  const longerLen = longer.length;
+  if (longerLen === 0) return 1.0;
+
+  const costs = [];
+  for (let i = 0; i <= longer.length; i++) {
+    let lastValue = i;
+    for (let j = 0; j <= shorter.length; j++) {
+      if (i === 0) {
+        costs[j] = j;
+      } else if (j > 0) {
+        let newValue = costs[j - 1];
+        if (longer.charAt(i - 1) !== shorter.charAt(j - 1)) {
+          newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+        }
+        costs[j - 1] = lastValue;
+        lastValue = newValue;
+      }
+    }
+    if (i > 0) costs[shorter.length] = lastValue;
+  }
+  return (longerLen - costs[shorter.length]) / longerLen;
+};
+
+const calcClientFuzzyScore = (query, name, artist) => {
+  const q = normalizeForFuzzy(query);
+  if (!q) return 0;
+  const n = normalizeForFuzzy(name);
+  const a = normalizeForFuzzy(artist);
+  const comb = `${n} ${a}`.trim();
+  const inv = `${a} ${n}`.trim();
+
+  if (q === n || q === comb || comb.includes(q) || n.includes(q)) return 1.0;
+  if (a && (q === a || a.includes(q))) return 0.98;
+
+  const rTitle = getSimilarityRatio(q, n);
+  const rArtist = a ? getSimilarityRatio(q, a) : 0;
+  const rComb = getSimilarityRatio(q, comb);
+  const rInv = getSimilarityRatio(q, inv);
+
+  const qTokens = q.split(' ');
+  const allTokens = comb.split(' ');
+  const tokenScores = qTokens.map((qt) => {
+    let best = Math.max(...allTokens.map((tt) => getSimilarityRatio(qt, tt)), 0);
+    for (const tt of allTokens) {
+      if (qt.length >= 3 && tt.includes(qt)) best = Math.max(best, 0.95);
+      else if (tt.length >= 4 && qt.includes(tt)) best = Math.max(best, 0.85);
+    }
+    return best;
+  });
+  const avgTokens = tokenScores.reduce((acc, v) => acc + v, 0) / (tokenScores.length || 1);
+
+  return Math.max(rTitle, rArtist, rComb, rInv, avgTokens);
+};
+
+const FRONTEND_SEARCH_CATALOG = [
+  // KR$NA (Krsna) Hip-Hop
+  { id: 'krsna-1', name: 'Say My Name', artist: 'KR$NA', youtube_id: 'd7m_c0w5z_o', image: 'https://i.ytimg.com/vi/d7m_c0w5z_o/hqdefault.jpg', duration: 215, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'krsna-2', name: 'No Cap', artist: 'KR$NA', youtube_id: 'O1mQn4P9z2w', image: 'https://i.ytimg.com/vi/O1mQn4P9z2w/hqdefault.jpg', duration: 180, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'krsna-3', name: 'Makasam', artist: 'KR$NA', youtube_id: 'JgZ3o8dD_Q0', image: 'https://i.ytimg.com/vi/JgZ3o8dD_Q0/hqdefault.jpg', duration: 320, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'krsna-4', name: 'Hola Amigo', artist: 'KR$NA & Seedhe Maut', youtube_id: 's_8xW_P6Yp0', image: 'https://i.ytimg.com/vi/s_8xW_P6Yp0/hqdefault.jpg', duration: 210, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'krsna-5', name: 'Prarthana', artist: 'KR$NA', youtube_id: '8P6pT7ZzG5c', image: 'https://i.ytimg.com/vi/8P6pT7ZzG5c/hqdefault.jpg', duration: 195, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'krsna-6', name: 'I Guess', artist: 'KR$NA', youtube_id: 'Y_JzW5vW_9w', image: 'https://i.ytimg.com/vi/Y_JzW5vW_9w/hqdefault.jpg', duration: 175, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'krsna-7', name: 'Roll Up', artist: 'KR$NA ft. Badshah', youtube_id: '6_P2mK_xV8A', image: 'https://i.ytimg.com/vi/6_P2mK_xV8A/hqdefault.jpg', duration: 205, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'krsna-8', name: 'Blow Up', artist: 'KR$NA', youtube_id: 'm9z8X8pQ2Y0', image: 'https://i.ytimg.com/vi/m9z8X8pQ2Y0/hqdefault.jpg', duration: 190, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'krsna-9', name: 'Boom Shack-A-Lak', artist: 'Apache Indian', youtube_id: 'kZzBd41NuZw', image: 'https://i.ytimg.com/vi/kZzBd41NuZw/hqdefault.jpg', duration: 272, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  // Calm
+  { id: 'c-1', name: 'Kun Faya Kun', artist: 'A.R. Rahman', youtube_id: 'T94PHkuydcw', image: 'https://i.ytimg.com/vi/T94PHkuydcw/hqdefault.jpg', duration: 473, detected_mood: 'Calm', mood_match: 'Calm' },
+  { id: 'c-2', name: 'Iktara', artist: 'Kavita Seth', youtube_id: 'fSS_R91Nimw', image: 'https://i.ytimg.com/vi/fSS_R91Nimw/hqdefault.jpg', duration: 253, detected_mood: 'Calm', mood_match: 'Calm' },
+  { id: 'c-3', name: 'Safarnama', artist: 'Lucky Ali', youtube_id: 'qP_VpX8C0p0', image: 'https://i.ytimg.com/vi/qP_VpX8C0p0/hqdefault.jpg', duration: 251, detected_mood: 'Calm', mood_match: 'Calm' },
+  { id: 'c-4', name: 'Sham', artist: 'Amit Trivedi', youtube_id: '7v-z0lJmFio', image: 'https://i.ytimg.com/vi/7v-z0lJmFio/hqdefault.jpg', duration: 247, detected_mood: 'Calm', mood_match: 'Calm' },
+  { id: 'c-5', name: 'Weightless', artist: 'Marconi Union', youtube_id: 'UfcAVejslrU', image: 'https://i.ytimg.com/vi/UfcAVejslrU/hqdefault.jpg', duration: 485, detected_mood: 'Calm', mood_match: 'Calm' },
+  { id: 'c-6', name: 'Clair de Lune', artist: 'Claude Debussy', youtube_id: 'WNcsUNKlAKw', image: 'https://i.ytimg.com/vi/WNcsUNKlAKw/hqdefault.jpg', duration: 302, detected_mood: 'Calm', mood_match: 'Calm' },
+  { id: 'c-7', name: 'Sunset Lover', artist: 'Petit Biscuit', youtube_id: 'wuCK-oiE3rA', image: 'https://i.ytimg.com/vi/wuCK-oiE3rA/hqdefault.jpg', duration: 237, detected_mood: 'Calm', mood_match: 'Calm' },
+  { id: 'c-8', name: 'Holocene', artist: 'Bon Iver', youtube_id: 'TWcyIpul8OE', image: 'https://i.ytimg.com/vi/TWcyIpul8OE/hqdefault.jpg', duration: 337, detected_mood: 'Calm', mood_match: 'Calm' },
+  { id: 'c-9', name: 'River Flows in You', artist: 'Yiruma', youtube_id: '7maJOI3QMu0', image: 'https://i.ytimg.com/vi/7maJOI3QMu0/hqdefault.jpg', duration: 180, detected_mood: 'Calm', mood_match: 'Calm' },
+
+  // Romantic
+  { id: 'r-1', name: 'Raataan Lambiyan', artist: 'Jubin Nautiyal', youtube_id: 'gvyUuxdRdR4', image: 'https://i.ytimg.com/vi/gvyUuxdRdR4/hqdefault.jpg', duration: 230, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-2', name: 'Apna Bana Le', artist: 'Arijit Singh', youtube_id: 'ElZfdU54Cp8', image: 'https://i.ytimg.com/vi/ElZfdU54Cp8/hqdefault.jpg', duration: 261, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-3', name: 'Tum Hi Ho', artist: 'Arijit Singh', youtube_id: 'IJq0yyWug1k', image: 'https://i.ytimg.com/vi/IJq0yyWug1k/hqdefault.jpg', duration: 262, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-4', name: 'Channa Mereya', artist: 'Arijit Singh', youtube_id: '284Ov7ysmfA', image: 'https://i.ytimg.com/vi/284Ov7ysmfA/hqdefault.jpg', duration: 289, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-5', name: 'Agar Tum Saath Ho', artist: 'Alka Yagnik & Arijit Singh', youtube_id: 'sK7riqg2mr4', image: 'https://i.ytimg.com/vi/sK7riqg2mr4/hqdefault.jpg', duration: 341, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-6', name: 'Shayad', artist: 'Arijit Singh', youtube_id: 'mFvyb7Fj9_8', image: 'https://i.ytimg.com/vi/mFvyb7Fj9_8/hqdefault.jpg', duration: 247, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-7', name: 'Tere Vaste', artist: 'Varun Jain & Sachin-Jigar', youtube_id: 'VAdGW7QDJUI', image: 'https://i.ytimg.com/vi/VAdGW7QDJUI/hqdefault.jpg', duration: 189, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-8', name: 'O Maahi', artist: 'Arijit Singh', youtube_id: '7c3-Ge36k3w', image: 'https://i.ytimg.com/vi/7c3-Ge36k3w/hqdefault.jpg', duration: 233, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-9', name: 'Heeriye', artist: 'Jasleen Royal & Arijit Singh', youtube_id: 'RLzC55ai0eo', image: 'https://i.ytimg.com/vi/RLzC55ai0eo/hqdefault.jpg', duration: 194, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-10', name: 'Kahani Suno 2.0', artist: 'Kaifi Khalil', youtube_id: '_XBVWlI8TsQ', image: 'https://i.ytimg.com/vi/_XBVWlI8TsQ/hqdefault.jpg', duration: 173, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-11', name: 'Pasoori', artist: 'Ali Sethi & Shae Gill', youtube_id: '5Eqb_-j3FDA', image: 'https://i.ytimg.com/vi/5Eqb_-j3FDA/hqdefault.jpg', duration: 224, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-12', name: 'Maan Meri Jaan', artist: 'King', youtube_id: 'VuG7ge_8I2Y', image: 'https://i.ytimg.com/vi/VuG7ge_8I2Y/hqdefault.jpg', duration: 194, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-13', name: 'Kal Ho Naa Ho', artist: 'Sonu Nigam', youtube_id: 'oq5Ocx_rEv8', image: 'https://i.ytimg.com/vi/oq5Ocx_rEv8/hqdefault.jpg', duration: 321, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-14', name: 'Kabira', artist: 'Tochi Raina & Rekha Bhardwaj', youtube_id: 'jHNNMj5bNQw', image: 'https://i.ytimg.com/vi/jHNNMj5bNQw/hqdefault.jpg', duration: 223, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-15', name: 'Gerua', artist: 'Arijit Singh & Antara Mitra', youtube_id: 'AEIVhBS6baE', image: 'https://i.ytimg.com/vi/AEIVhBS6baE/hqdefault.jpg', duration: 345, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-16', name: 'Zaalima', artist: 'Arijit Singh & Harshdeep Kaur', youtube_id: 'hhdSyH4QCqA', image: 'https://i.ytimg.com/vi/hhdSyH4QCqA/hqdefault.jpg', duration: 299, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-17', name: 'Hawayein', artist: 'Arijit Singh', youtube_id: 'cYOB941gyXI', image: 'https://i.ytimg.com/vi/cYOB941gyXI/hqdefault.jpg', duration: 290, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-18', name: 'Tujhe Kitna Chahne Lage', artist: 'Arijit Singh', youtube_id: 'b_Kz60o0Yjc', image: 'https://i.ytimg.com/vi/b_Kz60o0Yjc/hqdefault.jpg', duration: 284, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-19', name: 'Pehle Bhi Main', artist: 'Vishal Mishra', youtube_id: 'iAIBF2ngbWY', image: 'https://i.ytimg.com/vi/iAIBF2ngbWY/hqdefault.jpg', duration: 250, detected_mood: 'Romantic', mood_match: 'Romantic' },
+  { id: 'r-20', name: 'Raanjha', artist: 'B Praak & Jasleen Royal', youtube_id: 'V7LwfY5U5WI', image: 'https://i.ytimg.com/vi/V7LwfY5U5WI/hqdefault.jpg', duration: 228, detected_mood: 'Romantic', mood_match: 'Romantic' },
+
+  // Happy
+  { id: 'h-1', name: 'Kesariya', artist: 'Arijit Singh', youtube_id: 'BddP6PYo2gs', image: 'https://i.ytimg.com/vi/BddP6PYo2gs/hqdefault.jpg', duration: 268, detected_mood: 'Happy', mood_match: 'Happy' },
+  { id: 'h-2', name: 'Ilahi', artist: 'Arijit Singh', youtube_id: 'fdubeMFwuGs', image: 'https://i.ytimg.com/vi/fdubeMFwuGs/hqdefault.jpg', duration: 228, detected_mood: 'Happy', mood_match: 'Happy' },
+  { id: 'h-3', name: 'Matargashti', artist: 'Mohit Chauhan', youtube_id: '6vKucgAeF_Q', image: 'https://i.ytimg.com/vi/6vKucgAeF_Q/hqdefault.jpg', duration: 328, detected_mood: 'Happy', mood_match: 'Happy' },
+  { id: 'h-4', name: 'Subhanallah', artist: 'Sreerama Chandra', youtube_id: 'RCXB_7zPzYk', image: 'https://i.ytimg.com/vi/RCXB_7zPzYk/hqdefault.jpg', duration: 249, detected_mood: 'Happy', mood_match: 'Happy' },
+  { id: 'h-5', name: 'Gallan Goodiyan', artist: 'Yashita Sharma & Shankar Mahadevan', youtube_id: 'jCEdTq3j-0U', image: 'https://i.ytimg.com/vi/jCEdTq3j-0U/hqdefault.jpg', duration: 296, detected_mood: 'Happy', mood_match: 'Happy' },
+  { id: 'h-6', name: 'Dil Dhadakne Do', artist: 'Suraj Jagan & Joi Barua', youtube_id: 'Bq5_mFz2K2s', image: 'https://i.ytimg.com/vi/Bq5_mFz2K2s/hqdefault.jpg', duration: 229, detected_mood: 'Happy', mood_match: 'Happy' },
+  { id: 'h-7', name: 'Sooraj Dooba Hain', artist: 'Arijit Singh', youtube_id: 'nCg3ufihKyU', image: 'https://i.ytimg.com/vi/nCg3ufihKyU/hqdefault.jpg', duration: 264, detected_mood: 'Happy', mood_match: 'Happy' },
+  { id: 'h-8', name: 'Badtameez Dil', artist: 'Benny Dayal', youtube_id: 'II2EO3NwUr8', image: 'https://i.ytimg.com/vi/II2EO3NwUr8/hqdefault.jpg', duration: 253, detected_mood: 'Happy', mood_match: 'Happy' },
+  { id: 'h-9', name: 'London Thumakda', artist: 'Labh Janjua', youtube_id: '0m3uU46QWrg', image: 'https://i.ytimg.com/vi/0m3uU46QWrg/hqdefault.jpg', duration: 231, detected_mood: 'Happy', mood_match: 'Happy' },
+  { id: 'h-10', name: 'Senorita', artist: 'Farhan Akhtar & Hrithik Roshan', youtube_id: 't8n-C4_vC20', image: 'https://i.ytimg.com/vi/t8n-C4_vC20/hqdefault.jpg', duration: 231, detected_mood: 'Happy', mood_match: 'Happy' },
+
+  // Energetic
+  { id: 'e-1', name: 'Believer', artist: 'Imagine Dragons', youtube_id: '7wtfhZwyrcc', image: 'https://i.ytimg.com/vi/7wtfhZwyrcc/hqdefault.jpg', duration: 204, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-2', name: 'Machayenge 3', artist: 'Emiway Bantai', youtube_id: 'Dlz_XHeUUcw', image: 'https://i.ytimg.com/vi/Dlz_XHeUUcw/hqdefault.jpg', duration: 185, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-3', name: 'Love Dose', artist: 'Yo Yo Honey Singh', youtube_id: 'TvngY4unyL4', image: 'https://i.ytimg.com/vi/TvngY4unyL4/hqdefault.jpg', duration: 228, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-4', name: 'Desi Kalakaar', artist: 'Yo Yo Honey Singh', youtube_id: 'KhnvxXffwio', image: 'https://i.ytimg.com/vi/KhnvxXffwio/hqdefault.jpg', duration: 259, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-5', name: 'Blue Eyes', artist: 'Yo Yo Honey Singh', youtube_id: 'NbyHNASFi6U', image: 'https://i.ytimg.com/vi/NbyHNASFi6U/hqdefault.jpg', duration: 220, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-6', name: 'Dope Shope', artist: 'Yo Yo Honey Singh', youtube_id: 't0qI_01sLpQ', image: 'https://i.ytimg.com/vi/t0qI_01sLpQ/hqdefault.jpg', duration: 190, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-7', name: 'Brown Rang', artist: 'Yo Yo Honey Singh', youtube_id: 'PqFMFVcCZgI', image: 'https://i.ytimg.com/vi/PqFMFVcCZgI/hqdefault.jpg', duration: 175, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-8', name: 'High Heels', artist: 'Yo Yo Honey Singh & Jaz Dhami', youtube_id: 'kJqU9F2p6_4', image: 'https://i.ytimg.com/vi/kJqU9F2p6_4/hqdefault.jpg', duration: 215, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-9', name: 'Angreji Beat', artist: 'Yo Yo Honey Singh & Gippy Grewal', youtube_id: '2oMv4N1GkQk', image: 'https://i.ytimg.com/vi/2oMv4N1GkQk/hqdefault.jpg', duration: 210, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-10', name: 'Lungi Dance', artist: 'Yo Yo Honey Singh', youtube_id: '2kWly_tXpFQ', image: 'https://i.ytimg.com/vi/2kWly_tXpFQ/hqdefault.jpg', duration: 230, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-11', name: 'Chaleya', artist: 'Arijit Singh & Shilpa Rao', youtube_id: 'VAdGW7QDJUI', image: 'https://i.ytimg.com/vi/VAdGW7QDJUI/hqdefault.jpg', duration: 200, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-12', name: 'Boom Shack-A-Lak', artist: 'Apache Indian', youtube_id: 'kZzBd41NuZw', image: 'https://i.ytimg.com/vi/kZzBd41NuZw/hqdefault.jpg', duration: 272, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-13', name: 'Starboy', artist: 'The Weeknd', youtube_id: '34Na4j8AVgA', image: 'https://i.ytimg.com/vi/34Na4j8AVgA/hqdefault.jpg', duration: 230, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-14', name: 'Blinding Lights', artist: 'The Weeknd', youtube_id: '4NRXx6U8ABQ', image: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg', duration: 200, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-15', name: 'Kar Gayi Chull', artist: 'Badshah & Neha Kakkar', youtube_id: 'NTHz9ephYTw', image: 'https://i.ytimg.com/vi/NTHz9ephYTw/hqdefault.jpg', duration: 187, detected_mood: 'Energetic', mood_match: 'Energetic' },
+  { id: 'e-16', name: 'Dil Nu', artist: 'AP Dhillon', youtube_id: 'xU3X_g_l07c', image: 'https://i.ytimg.com/vi/xU3X_g_l07c/hqdefault.jpg', duration: 195, detected_mood: 'Energetic', mood_match: 'Energetic' },
+
+  // Focus
+  { id: 'f-1', name: 'Kho Gaye Hum Kahan', artist: 'Jasleen Royal', youtube_id: 'vt4jX0iPU40', image: 'https://i.ytimg.com/vi/vt4jX0iPU40/hqdefault.jpg', duration: 214, detected_mood: 'Focus', mood_match: 'Focus' },
+  { id: 'f-2', name: 'Phir Se Udd Chala', artist: 'Mohit Chauhan', youtube_id: '2iqbx7Tzxbw', image: 'https://i.ytimg.com/vi/2iqbx7Tzxbw/hqdefault.jpg', duration: 271, detected_mood: 'Focus', mood_match: 'Focus' },
+  { id: 'f-3', name: 'Aazaadiyan', artist: 'Rahat Fateh Ali Khan', youtube_id: '01Qk9mHjC5E', image: 'https://i.ytimg.com/vi/01Qk9mHjC5E/hqdefault.jpg', duration: 260, detected_mood: 'Focus', mood_match: 'Focus' },
+  { id: 'f-4', name: 'Deep Focus Theta Waves', artist: 'Binaural Mind', youtube_id: 'WPni755-Krg', image: 'https://i.ytimg.com/vi/WPni755-Krg/hqdefault.jpg', duration: 195, detected_mood: 'Focus', mood_match: 'Focus' },
+
+  // Sad / Reflective
+  { id: 's-1', name: 'Channa Mereya', artist: 'Arijit Singh', youtube_id: '284Ov7ysmfA', image: 'https://i.ytimg.com/vi/284Ov7ysmfA/hqdefault.jpg', duration: 289, detected_mood: 'Sad', mood_match: 'Sad' },
+  { id: 's-2', name: 'Agar Tum Saath Ho', artist: 'Alka Yagnik & Arijit Singh', youtube_id: 'sK7riqg2mr4', image: 'https://i.ytimg.com/vi/sK7riqg2mr4/hqdefault.jpg', duration: 341, detected_mood: 'Sad', mood_match: 'Sad' },
+  { id: 's-3', name: 'Bekhayali', artist: 'Sachet Tandon', youtube_id: 'VOLKJJvfAbg', image: 'https://i.ytimg.com/vi/VOLKJJvfAbg/hqdefault.jpg', duration: 371, detected_mood: 'Sad', mood_match: 'Sad' },
+  { id: 's-4', name: 'Tujhe Bhula Diya', artist: 'Mohit Chauhan & Shekhar', youtube_id: '1y3wFvC9W2Q', image: 'https://i.ytimg.com/vi/1y3wFvC9W2Q/hqdefault.jpg', duration: 279, detected_mood: 'Sad', mood_match: 'Sad' },
+  { id: 's-5', name: 'Phir Bhi Tumko Chaahunga', artist: 'Arijit Singh', youtube_id: '_aktURityQw', image: 'https://i.ytimg.com/vi/_aktURityQw/hqdefault.jpg', duration: 351, detected_mood: 'Sad', mood_match: 'Sad' },
+  { id: 's-6', name: 'Alvida', artist: 'KK', youtube_id: 'dD9l_s3l8eA', image: 'https://i.ytimg.com/vi/dD9l_s3l8eA/hqdefault.jpg', duration: 340, detected_mood: 'Sad', mood_match: 'Sad' },
+];
+
+const performClientSearch = (titleQuery = '', artistQuery = '') => {
+  const tQ = normalizeForFuzzy(titleQuery);
+  const aQ = normalizeForFuzzy(artistQuery);
+  if (!tQ && !aQ) return [];
+
+  const scored = [];
+  for (const track of FRONTEND_SEARCH_CATALOG) {
+    const tName = normalizeForFuzzy(track.name);
+    const tArtist = normalizeForFuzzy(track.artist);
+    let matchScore = 0;
+
+    if (tQ && aQ) {
+      const titleMatches = tName.includes(tQ) || tQ.includes(tName) || getSimilarityRatio(tQ, tName) >= 0.75;
+      const artistMatches = tArtist.includes(aQ) || aQ.includes(tArtist) || getSimilarityRatio(aQ, tArtist) >= 0.75;
+
+      if (titleMatches && artistMatches) {
+        matchScore = 1.0;
+      } else if (titleMatches) {
+        matchScore = 0.85;
+      } else if (artistMatches) {
+        matchScore = 0.82;
+      }
+    } else if (tQ && !aQ) {
+      if (tName.includes(tQ) || tQ.includes(tName)) {
+        matchScore = 1.0;
+      } else if (tArtist.includes(tQ) || tQ.includes(tArtist)) {
+        matchScore = 0.95;
+      } else {
+        matchScore = Math.max(getSimilarityRatio(tQ, tName), getSimilarityRatio(tQ, tArtist));
+      }
+    } else if (!tQ && aQ) {
+      // ONLY match against artist name! Never against song title!
+      if (tArtist.includes(aQ) || aQ.includes(tArtist)) {
+        matchScore = 1.0;
+      } else {
+        matchScore = getSimilarityRatio(aQ, tArtist);
+      }
+    }
+
+    // Strict cutoff: completely avoids false positives like "kitna" for "krsna"
+    if (matchScore >= 0.70) {
+      scored.push({ ...track, score: matchScore });
+    }
+  }
+
+  scored.sort((a, b) => (b.score || 0) - (a.score || 0));
+  return scored;
+};
+
+
 const FavoriteTracksSection = () => {
   const dispatch = useDispatch();
   const { token, isAuthenticated } = useSelector((state) => state.auth);
@@ -319,7 +560,7 @@ const FavoriteTracksSection = () => {
     persistMoodFavorites(selectedMoodTab, nextList);
   };
 
-  // Search tracks with artist and title
+  // Typo-tolerant instant fuzzy search (Client 0ms + Backend parallel enrichment)
   useEffect(() => {
     const t = searchTitle.trim();
     const a = searchArtist.trim();
@@ -329,19 +570,38 @@ const FavoriteTracksSection = () => {
       return;
     }
 
+    // 1. Instant 0ms Client-Side Fuzzy Search (catches typos like 'kasariya', 'beliver', 'arjit' immediately)
+    const instantMatches = performClientSearch(t, a);
+    if (instantMatches.length > 0) {
+      setSearchResults(instantMatches);
+    }
+
+    // 2. Parallel Debounced Backend Search for global catalog expansion
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
         const res = await axios.get(`${API_BASE_URL}/api/search-tracks`, {
           params: { title: t, artist: a, limit: 12 },
         });
-        setSearchResults(res.data?.tracks || []);
+        const remoteTracks = res.data?.tracks || [];
+        // Merge without duplicates, prioritizing highest relevance
+        const mergedMap = new Map();
+        instantMatches.forEach((item) => {
+          mergedMap.set(`${item.name.toLowerCase()}:${item.artist.toLowerCase()}`, item);
+        });
+        remoteTracks.forEach((item) => {
+          const key = `${item.name.toLowerCase()}:${item.artist.toLowerCase()}`;
+          if (!mergedMap.has(key)) {
+            mergedMap.set(key, item);
+          }
+        });
+        setSearchResults(Array.from(mergedMap.values()));
       } catch (e) {
-        console.warn('Search failed:', e);
+        console.warn('Backend search note (instant client catalog active):', e);
       } finally {
         setIsSearching(false);
       }
-    }, 350);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [searchTitle, searchArtist]);
@@ -350,14 +610,29 @@ const FavoriteTracksSection = () => {
     const t = searchTitle.trim();
     const a = searchArtist.trim();
     if (!t && !a) return;
+    const instantMatches = performClientSearch(t, a);
+    if (instantMatches.length > 0) {
+      setSearchResults(instantMatches);
+    }
     setIsSearching(true);
     try {
       const res = await axios.get(`${API_BASE_URL}/api/search-tracks`, {
         params: { title: t, artist: a, limit: 12 },
       });
-      setSearchResults(res.data?.tracks || []);
+      const remoteTracks = res.data?.tracks || [];
+      const mergedMap = new Map();
+      instantMatches.forEach((item) => {
+        mergedMap.set(`${item.name.toLowerCase()}:${item.artist.toLowerCase()}`, item);
+      });
+      remoteTracks.forEach((item) => {
+        const key = `${item.name.toLowerCase()}:${item.artist.toLowerCase()}`;
+        if (!mergedMap.has(key)) {
+          mergedMap.set(key, item);
+        }
+      });
+      setSearchResults(Array.from(mergedMap.values()));
     } catch (e) {
-      console.warn('Search failed:', e);
+      console.warn('Backend search notice:', e);
     } finally {
       setIsSearching(false);
     }
@@ -531,34 +806,7 @@ const FavoriteTracksSection = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Cloud Database Sync Status Pill */}
-          {syncStatus === 'cloud' ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px] font-mono font-medium shadow-sm">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Database Synced</span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyan/10 border border-cyan/25 text-cyan text-[11px] font-mono font-medium">
-              <span>💾 Local Storage</span>
-            </span>
-          )}
 
-          {/* Add Track Button */}
-          {currentFavorites.length < 5 && (
-            <button
-              onClick={openAddModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-obsidian-950 text-xs font-bold shadow-md hover:scale-105 active:scale-95 transition-all cursor-pointer"
-              style={{
-                backgroundColor: currentTabMeta.color,
-                boxShadow: `0 4px 15px ${currentTabMeta.color}66`,
-              }}
-            >
-              <span>+</span>
-              <span>Add to {currentTabMeta.label}</span>
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Mood Tab Bar: Switch between the 6 moods' 5 favorites */}
@@ -943,8 +1191,12 @@ const FavoriteTracksSection = () => {
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             <img
-                              src={item.image}
+                              src={item.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=1e1b4b&color=a855f7&size=200&bold=true`}
                               alt={item.name}
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=1e1b4b&color=a855f7&size=200&bold=true`;
+                              }}
                               className="w-10 h-10 rounded-lg object-cover bg-obsidian-800 flex-shrink-0 shadow"
                             />
                             <div className="min-w-0">
@@ -952,13 +1204,14 @@ const FavoriteTracksSection = () => {
                               <p className="text-[11px] text-slate-400 truncate">{item.artist}</p>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span
-                                  className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full border uppercase ${
+                                  className={`text-[9.5px] font-mono px-2 py-0.5 rounded-full border uppercase font-bold flex items-center gap-1 ${
                                     isMatch
-                                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                                      : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
+                                      : 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
                                   }`}
                                 >
-                                  {isMatch ? `✓ ${detected} Match` : `Belongs to ${detected}`}
+                                  <span>{isMatch ? '✓' : '💡'}</span>
+                                  <span>{isMatch ? `${detected} Match` : `Belongs to ${detected}`}</span>
                                 </span>
                               </div>
                             </div>
@@ -986,6 +1239,18 @@ const FavoriteTracksSection = () => {
                         </div>
                       );
                     })}
+                  </div>
+                )}
+
+                {/* Empty Search Feedback */}
+                {displayedSearchResults.length === 0 && (searchTitle.trim() || searchArtist.trim()) && !isSearching && (
+                  <div className="p-3.5 rounded-xl bg-obsidian-950/80 border border-white/10 text-center space-y-1 mt-2 animate-fadeIn">
+                    <p className="text-xs text-slate-300 font-semibold">
+                      No matching songs found for &quot;{searchTitle || searchArtist}&quot;
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      Try checking spelling or use the manual details form below to add any custom track.
+                    </p>
                   </div>
                 )}
               </div>

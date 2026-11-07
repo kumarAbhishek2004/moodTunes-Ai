@@ -20,6 +20,7 @@ class PlaylistService:
         name: str,
         description: str = "",
         mood: Optional[str] = None,
+        cover: Optional[str] = None,
         songs: Optional[List[Song]] = None,
         is_public: bool = False
     ) -> dict:
@@ -35,6 +36,7 @@ class PlaylistService:
             "name": name,
             "description": description,
             "mood": mood,
+            "cover": cover,
             "songs": [song.dict() for song in songs],
             "is_public": is_public,
             "created_at": datetime.utcnow().isoformat(),
@@ -50,6 +52,7 @@ class PlaylistService:
             "name": name,
             "description": description,
             "mood": mood,
+            "cover": cover,
             "songs": [song.dict() for song in songs],
             "is_public": is_public,
             "created_at": playlist_data["created_at"],

@@ -62,11 +62,40 @@ export const FAMOUS_SONGS_YOUTUBE = {
 };
 
 /**
+ * Common typo & transliteration normalizer
+ */
+const COMMON_TYPOS = {
+  kasariya: 'kesariya',
+  kesriya: 'kesariya',
+  arjit: 'arijit',
+  ratan: 'raataan',
+  raatan: 'raataan',
+  beliver: 'believer',
+  iktara: 'iktara',
+  'ik tara': 'iktara',
+  'channa merya': 'channa mereya',
+  'apna bna le': 'apna bana le',
+  'apna banale': 'apna bana le',
+  weekend: 'the weeknd',
+  weeknd: 'the weeknd',
+};
+
+const normalizeSongText = (text = '') => {
+  let s = String(text).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  for (const [typo, fixed] of Object.entries(COMMON_TYPOS)) {
+    if (s.includes(typo)) {
+      s = s.replace(new RegExp(`\\b${typo}\\b`, 'g'), fixed);
+    }
+  }
+  return s;
+};
+
+/**
  * Normalizes query string and resolves known YouTube ID
  */
 export const resolveKnownYouTubeId = (title = '', artist = '') => {
-  const t = String(title).toLowerCase().trim();
-  const a = String(artist).toLowerCase().trim();
+  const t = normalizeSongText(title);
+  const a = normalizeSongText(artist);
 
   // 1. Direct title check
   for (const [key, id] of Object.entries(FAMOUS_SONGS_YOUTUBE)) {
@@ -76,7 +105,7 @@ export const resolveKnownYouTubeId = (title = '', artist = '') => {
   }
 
   // 2. Combined artist + title check
-  const combined = `${a} ${t}`.toLowerCase();
+  const combined = `${a} ${t}`.trim();
   for (const [key, id] of Object.entries(FAMOUS_SONGS_YOUTUBE)) {
     if (combined.includes(key)) {
       return id;

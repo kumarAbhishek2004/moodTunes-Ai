@@ -92,10 +92,33 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
   const bottomOffsetClass = isBottomPlayerVisible ? 'bottom-24 sm:bottom-26' : 'bottom-5 sm:bottom-6';
 
   const rawMood = typeof currentMood === 'object' && currentMood !== null 
-    ? currentMood.mood 
+    ? (currentMood.mood || currentMood.id) 
     : (currentMood || reduxActiveMood);
-  const moodKey = String(rawMood || 'happy').toLowerCase().trim();
-  const moodTheme = CHATBOT_MOOD_THEMES[moodKey] || CHATBOT_MOOD_THEMES.happy;
+  const moodStr = String(rawMood || '').toLowerCase().trim();
+  
+  // Intelligent theme resolution based on active mood and playing track
+  const resolveTheme = () => {
+    if (CHATBOT_MOOD_THEMES[moodStr]) return CHATBOT_MOOD_THEMES[moodStr];
+    if (moodStr.includes('energetic') || moodStr.includes('energy') || moodStr.includes('party')) return CHATBOT_MOOD_THEMES.energetic;
+    if (moodStr.includes('romantic') || moodStr.includes('romance') || moodStr.includes('love')) return CHATBOT_MOOD_THEMES.romantic;
+    if (moodStr.includes('calm') || moodStr.includes('chill') || moodStr.includes('peace') || moodStr.includes('zen') || moodStr.includes('relax') || moodStr.includes('acoustic')) return CHATBOT_MOOD_THEMES.calm;
+    if (moodStr.includes('focus') || moodStr.includes('study') || moodStr.includes('lofi') || moodStr.includes('lo-fi')) return CHATBOT_MOOD_THEMES.focus;
+    if (moodStr.includes('sad') || moodStr.includes('reflect') || moodStr.includes('blues') || moodStr.includes('melanchol')) return CHATBOT_MOOD_THEMES.sad;
+    if (moodStr.includes('happy') || moodStr.includes('joy') || moodStr.includes('cheer')) return CHATBOT_MOOD_THEMES.happy;
+    
+    // Check current playing track tag
+    if (reduxCurrentSong) {
+      const g = String(reduxCurrentSong.genre || reduxCurrentSong.mood_match || '').toLowerCase();
+      if (g.includes('energetic')) return CHATBOT_MOOD_THEMES.energetic;
+      if (g.includes('romantic')) return CHATBOT_MOOD_THEMES.romantic;
+      if (g.includes('calm')) return CHATBOT_MOOD_THEMES.calm;
+      if (g.includes('focus')) return CHATBOT_MOOD_THEMES.focus;
+      if (g.includes('sad')) return CHATBOT_MOOD_THEMES.sad;
+    }
+    return CHATBOT_MOOD_THEMES.happy;
+  };
+
+  const moodTheme = resolveTheme();
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -385,14 +408,19 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
               <button
                 key={idx}
                 onClick={() => handleSongClick(song.name, song.artist)}
-                className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 hover:border-purple-400 rounded-lg text-purple-300 hover:text-purple-200 transition-all text-sm group"
+                className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-sm group border shadow-sm backdrop-blur-md hover:scale-[1.02] active:scale-95"
+                style={{
+                  backgroundColor: `rgba(${moodTheme.accentRgb}, 0.12)`,
+                  borderColor: `rgba(${moodTheme.accentRgb}, 0.35)`,
+                  color: moodTheme.accent,
+                }}
               >
                 <svg className="w-4 h-4 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                 </svg>
                 <div className="text-left">
-                  <div className="font-medium">{song.name}</div>
-                  <div className="text-xs text-purple-400/70">{song.artist}</div>
+                  <div className="font-semibold text-white group-hover:underline">{song.name}</div>
+                  <div className="text-[11px] opacity-80" style={{ color: moodTheme.accent }}>{song.artist}</div>
                 </div>
               </button>
             ))}
@@ -503,7 +531,12 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
           title="Open Aura AI Music Assistant"
         >
           {/* Ambient Shimmer Gradient */}
-          <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-600/15 via-pink-600/15 to-cyan/15 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+          <div
+            className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+            style={{
+              background: `radial-gradient(circle at center, rgba(${moodTheme.accentRgb}, 0.25), transparent 70%)`
+            }}
+          />
 
           {/* Glowing AI Avatar Orb in Mood Colors */}
           <div
@@ -632,11 +665,19 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
                 <div
                   className={`max-w-[85%] p-3.5 rounded-2xl shadow-lg ${
                     message.role === 'user'
-                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-br-sm'
+                      ? 'text-white rounded-br-sm'
                       : message.role === 'system'
                       ? 'bg-yellow-500/15 border border-yellow-500/30 text-yellow-300 text-xs rounded-xl'
                       : 'bg-slate-900/90 border border-white/10 text-slate-100 rounded-bl-sm'
                   }`}
+                  style={
+                    message.role === 'user'
+                      ? {
+                          background: `linear-gradient(135deg, ${moodTheme.accent}, rgba(${moodTheme.accentRgb}, 0.85))`,
+                          boxShadow: `0 4px 18px rgba(${moodTheme.accentRgb}, 0.35)`,
+                        }
+                      : undefined
+                  }
                 >
                   {renderMessage(message)}
                   {message.role !== 'system' && (
@@ -649,12 +690,15 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
             ))}
             {(isLoading || isTranscribing) && (
               <div className="flex justify-start">
-                <div className="bg-slate-900/90 border border-white/10 p-3 rounded-2xl rounded-bl-sm shadow-lg flex items-center gap-2">
-                  <span className="text-xs text-purple-300">Aura AI is thinking</span>
+                <div
+                  className="bg-slate-900/90 border p-3 rounded-2xl rounded-bl-sm shadow-lg flex items-center gap-2"
+                  style={{ borderColor: `rgba(${moodTheme.accentRgb}, 0.3)` }}
+                >
+                  <span className="text-xs font-semibold" style={{ color: moodTheme.accent }}>Aura AI is thinking</span>
                   <div className="flex gap-1">
-                    <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce"></div>
-                    <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                    <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: moodTheme.accent }}></div>
+                    <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: moodTheme.accent, animationDelay: '0.2s' }}></div>
+                    <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: moodTheme.accent, animationDelay: '0.4s' }}></div>
                   </div>
                 </div>
               </div>
@@ -669,7 +713,8 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
                 key={p.label}
                 onClick={() => handlePromptClick(p.text)}
                 disabled={isLoading || isRecording}
-                className="shrink-0 text-[10px] px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-white transition-all cursor-pointer whitespace-nowrap active:scale-95"
+                className="shrink-0 text-[10px] px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/15 border text-slate-300 hover:text-white transition-all cursor-pointer whitespace-nowrap active:scale-95"
+                style={{ borderColor: `rgba(${moodTheme.accentRgb}, 0.25)` }}
               >
                 {p.label}
               </button>
@@ -678,7 +723,13 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
 
           {/* Modernized Input Footer */}
           <div className="p-3 border-t border-white/10 bg-slate-950/90">
-            <div className="flex items-center gap-2 bg-slate-900/90 border border-white/15 focus-within:border-purple-400 focus-within:shadow-[0_0_20px_rgba(168,85,247,0.3)] rounded-2xl p-1.5 transition-all">
+            <div
+              className="flex items-center gap-2 bg-slate-900/90 border rounded-2xl p-1.5 transition-all"
+              style={{
+                borderColor: `rgba(${moodTheme.accentRgb}, 0.35)`,
+                boxShadow: `0 0 15px rgba(${moodTheme.accentRgb}, 0.12)`,
+              }}
+            >
               <input
                 type="text"
                 value={input}
@@ -713,7 +764,11 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
               <button
                 onClick={handleSend}
                 disabled={isLoading || !input.trim() || isRecording}
-                className="p-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md hover:opacity-95 transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer active:scale-95"
+                className="p-2 rounded-xl text-white shadow-md hover:opacity-95 transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer active:scale-95"
+                style={{
+                  background: `linear-gradient(135deg, ${moodTheme.accent}, rgba(${moodTheme.accentRgb}, 0.85))`,
+                  boxShadow: `0 4px 15px rgba(${moodTheme.accentRgb}, 0.35)`,
+                }}
                 title="Send message"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

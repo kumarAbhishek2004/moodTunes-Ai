@@ -732,6 +732,8 @@ async def create_user_playlist(
 
         mood=playlist_data.mood,
 
+        cover=playlist_data.cover,
+
         songs=playlist_data.songs,
 
         is_public=playlist_data.is_public
