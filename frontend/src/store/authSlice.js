@@ -4,12 +4,19 @@ import { API_BASE_URL } from '../config/api';
 
 const API_URL = API_BASE_URL;
 
-// Load user from localStorage
-const userFromStorage = localStorage.getItem('user');
+// Load user from localStorage safely
+const userFromStorage = (() => {
+  try {
+    const raw = localStorage.getItem('user');
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+})();
 const tokenFromStorage = localStorage.getItem('token');
 
 const initialState = {
-  user: userFromStorage ? JSON.parse(userFromStorage) : null,
+  user: userFromStorage,
   token: tokenFromStorage || null,
   isLoading: false,
   isAuthenticated: !!tokenFromStorage,

@@ -128,12 +128,28 @@ export const THEME_PALETTES = {
 };
 
 /**
- * Resolves current theme dynamically.
- * If music is playing: analyzes song's genre, tags, and mood match.
- * If no song is playing: uses the user's selected/detected mood.
+ * Resolves current theme dynamically ensuring STRICT 100% UI COLOR UNIFORMITY.
+ * The user's active atmosphere / mood always governs the entire application theme!
+ * (Navbar, Equalizer, Waveforms, Sliders, Glows, Chatbot, and Action Buttons).
  */
 export const resolveMusicTheme = (currentSong, activeMood = 'happy') => {
-  // If a song is active, check genre / tags / mood
+  // 1. Primary authority: The user's active mood atmosphere!
+  const rawMood = typeof activeMood === 'object' && activeMood !== null ? activeMood.mood : activeMood;
+  const moodStr = String(rawMood || '').toLowerCase().trim();
+
+  if (moodStr) {
+    if (THEME_PALETTES[moodStr]) {
+      return THEME_PALETTES[moodStr];
+    }
+    if (moodStr.includes('energetic') || moodStr.includes('energy')) return THEME_PALETTES.energetic;
+    if (moodStr.includes('romantic') || moodStr.includes('romance') || moodStr.includes('love')) return THEME_PALETTES.romantic;
+    if (moodStr.includes('calm') || moodStr.includes('peace') || moodStr.includes('zen') || moodStr.includes('relax')) return THEME_PALETTES.calm;
+    if (moodStr.includes('focus') || moodStr.includes('study') || moodStr.includes('work')) return THEME_PALETTES.focus;
+    if (moodStr.includes('sad') || moodStr.includes('reflect') || moodStr.includes('melanchol')) return THEME_PALETTES.sad;
+    if (moodStr.includes('happy') || moodStr.includes('joy') || moodStr.includes('cheer')) return THEME_PALETTES.happy;
+  }
+
+  // 2. Secondary fallback: check song tags if no active mood is specified
   if (currentSong) {
     const candidates = [];
     if (currentSong.genre) candidates.push(currentSong.genre);
@@ -144,53 +160,17 @@ export const resolveMusicTheme = (currentSong, activeMood = 'happy') => {
 
     for (const cand of candidates) {
       const c = String(cand).toLowerCase();
-      // Rock / Metal
-      if (c.includes('rock') || c.includes('metal') || c.includes('punk') || c.includes('hard') || c.includes('heavy') || c.includes('intense')) {
-        return THEME_PALETTES.rock;
-      }
-      // Electronic / EDM / Dance
-      if (c.includes('edm') || c.includes('electro') || c.includes('dance') || c.includes('house') || c.includes('techno') || c.includes('club') || c.includes('synth')) {
-        return THEME_PALETTES.electronic;
-      }
-      // Hip Hop / Rap / Trap / Urban
-      if (c.includes('hip hop') || c.includes('hiphop') || c.includes('rap') || c.includes('trap') || c.includes('drill') || c.includes('honey singh') || c.includes('badshah') || c.includes('raftaar') || c.includes('drake') || c.includes('eminem')) {
-        return THEME_PALETTES.hiphop;
-      }
-      // Romantic / Soulful / Bollywood Love
-      if (c.includes('romantic') || c.includes('love') || c.includes('romance') || c.includes('bollywood') || c.includes('jubin') || c.includes('arijit') || c.includes('atif') || c.includes('shreya') || c.includes('sufi')) {
-        return THEME_PALETTES.romantic;
-      }
-      // Calm / Lo-Fi / Acoustic
-      if (c.includes('calm') || c.includes('chill') || c.includes('acoustic') || c.includes('ambient') || c.includes('lofi') || c.includes('lo-fi') || c.includes('peaceful') || c.includes('serene')) {
-        return THEME_PALETTES.calm;
-      }
-      // Focus / Study / Classical
-      if (c.includes('focus') || c.includes('study') || c.includes('instrumental') || c.includes('classical') || c.includes('piano')) {
-        return THEME_PALETTES.focus;
-      }
-      // Jazz / Blues
-      if (c.includes('jazz') || c.includes('blues') || c.includes('soul') || c.includes('funk')) {
-        return THEME_PALETTES.jazz;
-      }
-      // Energetic / Workout
-      if (c.includes('energetic') || c.includes('energy') || c.includes('workout') || c.includes('fitness') || c.includes('party') || c.includes('fast')) {
-        return THEME_PALETTES.energetic;
-      }
-      // Sad / Reflective
-      if (c.includes('sad') || c.includes('reflective') || c.includes('melancholy') || c.includes('cry') || c.includes('heartbreak') || c.includes('broken')) {
-        return THEME_PALETTES.sad;
-      }
-      // Happy / Pop
-      if (c.includes('happy') || c.includes('joy') || c.includes('cheerful') || c.includes('pop')) {
-        return THEME_PALETTES.happy;
-      }
+      if (c.includes('energetic') || c.includes('workout') || c.includes('party')) return THEME_PALETTES.energetic;
+      if (c.includes('romantic') || c.includes('romance') || c.includes('love')) return THEME_PALETTES.romantic;
+      if (c.includes('calm') || c.includes('chill') || c.includes('ambient') || c.includes('lofi')) return THEME_PALETTES.calm;
+      if (c.includes('focus') || c.includes('study') || c.includes('piano')) return THEME_PALETTES.focus;
+      if (c.includes('sad') || c.includes('reflective') || c.includes('heartbreak')) return THEME_PALETTES.sad;
+      if (c.includes('happy') || c.includes('pop') || c.includes('cheerful')) return THEME_PALETTES.happy;
+      if (c.includes('rock') || c.includes('metal')) return THEME_PALETTES.rock;
+      if (c.includes('electronic') || c.includes('edm')) return THEME_PALETTES.electronic;
+      if (c.includes('hip hop') || c.includes('rap')) return THEME_PALETTES.hiphop;
     }
   }
 
-  // Fallback to active mood
-  const moodKey = (activeMood || 'happy').toLowerCase();
-  if (THEME_PALETTES[moodKey]) {
-    return THEME_PALETTES[moodKey];
-  }
   return THEME_PALETTES.happy;
 };

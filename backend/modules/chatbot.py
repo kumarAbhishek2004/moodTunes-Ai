@@ -473,6 +473,107 @@ Remember: Always use standard ASCII hyphen (-) between song and artist. Always i
             breakdown=breakdown
         )
 
+    def analyze_voice_mood(self, text: str, tone_features: dict = None) -> MoodDetectionResponse:
+        """
+        Multimodal voice emotion analyzer: evaluates both spoken semantic content (words)
+        and vocal acoustics (pitch, volume/energy, speech cadence/tempo).
+        """
+        tone_features = tone_features or {}
+        rms_energy = float(tone_features.get("energy", 0.2))
+        est_pitch = float(tone_features.get("pitch", 160.0))
+        speech_tempo = float(tone_features.get("tempo", 0.5))
+
+        # 1. Semantic Word Analysis
+        word_resp = self.analyze_text_mood(text) if text and text.strip() else None
+        word_dist = word_resp.mood_distribution if word_resp else {}
+
+        # 2. Acoustic Tone Scoring
+        tone_scores = {
+            "energetic": 10.0,
+            "happy": 15.0,
+            "calm": 20.0,
+            "romantic": 15.0,
+            "sad": 10.0,
+            "focus": 15.0,
+        }
+
+        # Energy modulation
+        if rms_energy > 0.35:
+            tone_scores["energetic"] += 45.0
+            tone_scores["happy"] += 25.0
+            tone_scores["calm"] = max(0.0, tone_scores["calm"] - 15.0)
+        elif rms_energy > 0.22:
+            tone_scores["energetic"] += 20.0
+            tone_scores["happy"] += 25.0
+            tone_scores["romantic"] += 15.0
+        elif rms_energy < 0.12:
+            tone_scores["calm"] += 35.0
+            tone_scores["sad"] += 30.0
+            tone_scores["romantic"] += 20.0
+            tone_scores["energetic"] = max(0.0, tone_scores["energetic"] - 25.0)
+
+        # Pitch modulation
+        if est_pitch > 210:
+            tone_scores["happy"] += 25.0
+            tone_scores["energetic"] += 20.0
+        elif est_pitch < 125:
+            tone_scores["sad"] += 25.0
+            tone_scores["calm"] += 15.0
+
+        # Tempo / Cadence modulation
+        if speech_tempo > 0.65:
+            tone_scores["energetic"] += 25.0
+            tone_scores["happy"] += 15.0
+        elif speech_tempo < 0.35:
+            tone_scores["calm"] += 20.0
+            tone_scores["sad"] += 20.0
+            tone_scores["romantic"] += 15.0
+
+        # Normalize tone distribution
+        tone_sum = sum(max(0.0, v) for v in tone_scores.values()) or 1.0
+        norm_tone = {k: round(max(0.0, v) / tone_sum * 100.0, 1) for k, v in tone_scores.items()}
+
+        # 3. Composite Fusion: 65% Words (if available), 35% Acoustic Tone
+        final_dist = {}
+        all_mood_keys = ["calm", "energetic", "happy", "romantic", "sad", "focus"]
+        
+        if word_dist:
+            for k in all_mood_keys:
+                w_val = float(word_dist.get(k, 0.0))
+                t_val = float(norm_tone.get(k, 0.0))
+                final_dist[k] = round(0.65 * w_val + 0.35 * t_val, 1)
+        else:
+            final_dist = norm_tone
+
+        # Ensure total is 100%
+        f_sum = sum(final_dist.values()) or 1.0
+        final_dist = {k: round((v / f_sum) * 100.0, 1) for k, v in final_dist.items()}
+
+        # Dominant mood
+        dom_mood = max(final_dist.items(), key=lambda x: x[1])[0]
+        confidence = min(98.0, max(68.0, round(final_dist[dom_mood] * 1.15, 1)))
+
+        tone_desc = f"Vocal Energy: {round(rms_energy, 2)} ({'High Energy' if rms_energy > 0.25 else 'Gentle/Soft'}), Pitch: {round(est_pitch, 0)}Hz, Tempo: {round(speech_tempo, 2)}"
+        words_desc = f'Spoken keywords: "{text}"' if text else "Voice tone acoustic analysis"
+
+        breakdown = [
+            EmotionScore(emotion=k, score=v, mood=k)
+            for k, v in sorted(final_dist.items(), key=lambda x: x[1], reverse=True)
+            if v > 0
+        ]
+
+        return MoodDetectionResponse(
+            emotion=dom_mood,
+            mood=dom_mood,
+            confidence=confidence,
+            all_emotions=final_dist,
+            mood_distribution=final_dist,
+            breakdown=breakdown,
+            explanation=f"Detected {dom_mood.upper()} atmosphere based on spoken words and vocal acoustic tone.",
+            tone_analysis=tone_desc,
+            words_analysis=words_desc
+        )
+
     def reset_conversation(self):
         """Reset conversation history"""
         self.conversation_history = []

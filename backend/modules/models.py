@@ -18,6 +18,9 @@ class MoodDetectionResponse(BaseModel):
     all_emotions: Dict[str, float] = Field(default_factory=dict)
     mood_distribution: Dict[str, float] = Field(default_factory=dict)
     breakdown: List[EmotionScore] = Field(default_factory=list)
+    explanation: Optional[str] = None
+    tone_analysis: Optional[str] = None
+    words_analysis: Optional[str] = None
 
 # Song
 class Song(BaseModel):

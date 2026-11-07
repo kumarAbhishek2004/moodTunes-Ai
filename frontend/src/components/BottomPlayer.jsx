@@ -160,7 +160,7 @@ const BottomPlayer = () => {
   // If user requested to remove player from screen, provide subtle restore pill with permanent dismiss
   if (isPlayerDismissed) {
     return (
-      <div className="fixed bottom-4 right-4 z-40 animate-fadeIn flex items-center gap-2">
+      <div className="fixed bottom-5 left-4 sm:left-6 z-40 animate-fadeIn flex items-center gap-2">
         <button
           onClick={() => dispatch(reopenPlayer())}
           className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-slate-900/95 hover:bg-slate-800 text-white text-xs font-semibold shadow-2xl border border-white/20 hover:border-cyan/50 backdrop-blur-xl transition-all hover:scale-105 active:scale-95 cursor-pointer group"
@@ -190,7 +190,7 @@ const BottomPlayer = () => {
     <footer
       role="region"
       aria-label="Persistent Audio Player"
-      className="fixed bottom-0 left-0 right-0 z-50 h-24 bg-obsidian-950/90 backdrop-blur-2xl border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.85)] transition-all duration-300 select-none"
+      className="fixed bottom-0 left-0 right-0 z-40 h-24 bg-obsidian-950/90 backdrop-blur-2xl border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.85)] transition-all duration-300 select-none"
     >
       {/* Mobile progress hairline bar at top */}
       <div className="md:hidden absolute top-0 left-0 right-0 h-1 bg-obsidian-800">

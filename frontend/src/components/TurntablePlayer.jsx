@@ -491,14 +491,20 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
                   <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden border-4 border-obsidian-950 shadow-inner flex items-center justify-center bg-obsidian-900">
                     <img
                       src={
-                        currentSong.image ||
-                        'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80'
+                        currentSong.image && !currentSong.image.includes('1511671782779')
+                          ? currentSong.image
+                          : (currentSong.youtube_id
+                              ? `https://i.ytimg.com/vi/${currentSong.youtube_id}/hqdefault.jpg`
+                              : `https://ui-avatars.com/api/?name=${encodeURIComponent(currentSong.name || 'Song')}&background=0f172a&color=38bdf8&size=200&font-size=0.35&bold=true`)
                       }
                       alt={currentSong.name}
                       className="w-full h-full object-cover"
                       onError={(e) => {
-                        e.target.src =
-                          'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80';
+                        if (currentSong.youtube_id && !e.target.src.includes('ytimg.com')) {
+                          e.target.src = `https://i.ytimg.com/vi/${currentSong.youtube_id}/hqdefault.jpg`;
+                        } else {
+                          e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentSong.name || 'Song')}&background=0f172a&color=38bdf8&size=200&font-size=0.35&bold=true`;
+                        }
                       }}
                     />
                     {/* Center Spindle Hole */}
@@ -579,17 +585,24 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
             </p>
           </div>
 
-          {/* Explainable AI Badge */}
-          <div className="p-3.5 rounded-2xl bg-emerald/10 border border-emerald/25 text-emerald text-xs leading-relaxed flex items-start gap-2.5">
-            <span className="text-sm mt-0.5 flex-shrink-0">💡</span>
-            <div>
-              <span className="font-semibold block mb-0.5">Why AI Recommended This:</span>
-              <p className="text-emerald-200/90 text-[11px]">
-                {currentSong.ai_explanation ||
-                  `Matches your ${activeMood} emotional state and session preferences with harmonic continuity.`}
-              </p>
+          {/* Explainable AI Badge - Strictly hidden for user-searched or manually chosen songs */}
+          {Boolean(
+            currentSong.ai_explanation &&
+            currentSong.source !== 'search' &&
+            currentSong.source !== 'manual' &&
+            currentSong.source !== 'favorites' &&
+            !currentSong.isUserSelected
+          ) && (
+            <div className="p-3.5 rounded-2xl bg-emerald/10 border border-emerald/25 text-emerald text-xs leading-relaxed flex items-start gap-2.5 animate-fadeIn">
+              <span className="text-sm mt-0.5 flex-shrink-0">💡</span>
+              <div>
+                <span className="font-semibold block mb-0.5">Why AI Recommended This:</span>
+                <p className="text-emerald-200/90 text-[11px]">
+                  {currentSong.ai_explanation}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Scrubber Progress Bar */}
           <div className="space-y-1.5 pt-2">

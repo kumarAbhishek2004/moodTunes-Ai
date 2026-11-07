@@ -229,18 +229,18 @@ const PersistentAudioEngine = () => {
     }
   }, [currentSong]);
 
-  // 4. Sync Volume & Mute
+  // 4. Sync Volume & Mute (Exclusive playback: mutes audio engine when isVideoMode is playing video!)
   useEffect(() => {
     if (!playerRef.current || typeof playerRef.current.setVolume !== 'function') return;
     try {
-      if (isMuted) {
+      if (isMuted || isVideoMode) {
         playerRef.current.mute();
       } else {
         playerRef.current.unMute();
         playerRef.current.setVolume(volume);
       }
     } catch (e) {}
-  }, [volume, isMuted]);
+  }, [volume, isMuted, isVideoMode]);
 
   // 5. Handle Seek Targets
   useEffect(() => {

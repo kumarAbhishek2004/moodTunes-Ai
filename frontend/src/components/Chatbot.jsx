@@ -1,6 +1,64 @@
 import { useState, useRef, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
+
+const CHATBOT_MOOD_THEMES = {
+  calm: {
+    name: 'Calm',
+    accent: '#00F2FE',
+    accentRgb: '0, 242, 254',
+    gradient: 'from-cyan-400 to-emerald-400',
+    headerGrad: 'from-cyan-950/60 via-slate-900/85 to-emerald-950/40',
+    userBubble: 'from-cyan-600 to-teal-600',
+    spark: '🌊',
+  },
+  romantic: {
+    name: 'Romantic',
+    accent: '#EC4899',
+    accentRgb: '236, 72, 153',
+    gradient: 'from-pink-500 to-rose-400',
+    headerGrad: 'from-pink-950/60 via-slate-900/85 to-rose-950/40',
+    userBubble: 'from-pink-600 to-rose-600',
+    spark: '💖',
+  },
+  happy: {
+    name: 'Happy',
+    accent: '#F59E0B',
+    accentRgb: '245, 158, 11',
+    gradient: 'from-amber-400 to-pink-500',
+    headerGrad: 'from-amber-950/60 via-slate-900/85 to-orange-950/40',
+    userBubble: 'from-amber-500 to-orange-500',
+    spark: '✨',
+  },
+  energetic: {
+    name: 'Energetic',
+    accent: '#F97316',
+    accentRgb: '249, 115, 22',
+    gradient: 'from-orange-500 to-amber-400',
+    headerGrad: 'from-orange-950/60 via-slate-900/85 to-amber-950/40',
+    userBubble: 'from-orange-500 to-amber-500',
+    spark: '⚡',
+  },
+  focus: {
+    name: 'Focus',
+    accent: '#10B981',
+    accentRgb: '16, 185, 129',
+    gradient: 'from-emerald-400 to-teal-500',
+    headerGrad: 'from-emerald-950/60 via-slate-900/85 to-teal-950/40',
+    userBubble: 'from-emerald-600 to-teal-600',
+    spark: '🧠',
+  },
+  sad: {
+    name: 'Reflective',
+    accent: '#3B82F6',
+    accentRgb: '59, 130, 246',
+    gradient: 'from-blue-500 to-indigo-500',
+    headerGrad: 'from-blue-950/60 via-slate-900/85 to-indigo-950/40',
+    userBubble: 'from-blue-600 to-indigo-600',
+    spark: '🌧️',
+  },
+};
 
 const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) => {
   // Load messages from sessionStorage on mount
@@ -24,6 +82,20 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('auto');
+
+  const reduxCurrentSong = useSelector((state) => state.audio?.currentSong);
+  const isPlayerDismissed = useSelector((state) => state.audio?.isPlayerDismissed);
+  const reduxActiveMood = useSelector((state) => state.audio?.activeMood);
+
+  // Dynamic vertical offset: If BottomPlayer dock is active, float above dock; otherwise stay anchored near bottom corner
+  const isBottomPlayerVisible = Boolean(reduxCurrentSong && !isPlayerDismissed);
+  const bottomOffsetClass = isBottomPlayerVisible ? 'bottom-24 sm:bottom-26' : 'bottom-5 sm:bottom-6';
+
+  const rawMood = typeof currentMood === 'object' && currentMood !== null 
+    ? currentMood.mood 
+    : (currentMood || reduxActiveMood);
+  const moodKey = String(rawMood || 'happy').toLowerCase().trim();
+  const moodTheme = CHATBOT_MOOD_THEMES[moodKey] || CHATBOT_MOOD_THEMES.happy;
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -402,71 +474,173 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
     }
   };
 
+  const SUGGESTION_PROMPTS = [
+    { label: '💖 Romantic Hits', text: 'Play romantic Bollywood love songs' },
+    { label: '⚡ Gym Energy', text: 'Play high energy workout beats' },
+    { label: '🌧️ Lo-Fi Chill', text: 'Play calm relaxing lo-fi study music' },
+    { label: '✨ Surprise Me', text: 'Recommend a popular trending hit song' },
+  ];
+
+  const handlePromptClick = (text) => {
+    setInput(text);
+    handleSendMessage(text);
+  };
+
   return (
     <>
+      {/* ============================================================== */}
+      {/* ULTRA-MODERN FLOATING AI COPILOT LAUNCHER                      */}
+      {/* Anchored at a stable, dedicated location on the screen          */}
+      {/* ============================================================== */}
       {!isOpen && (
         <button
           onClick={onToggle}
-          className="fixed bottom-20 sm:bottom-24 right-4 sm:right-6 p-3.5 sm:p-4 bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 rounded-full shadow-2xl hover:shadow-purple-500/50 transition-all duration-300 z-50 group transform hover:scale-110 border border-purple-400/40"
-          title="Open AI Music Assistant"
+          className={`fixed ${bottomOffsetClass} right-4 sm:right-6 z-50 group flex items-center gap-2.5 px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-full bg-slate-950/90 hover:bg-slate-900/95 backdrop-blur-2xl transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer overflow-hidden border`}
+          style={{
+            borderColor: `${moodTheme.accent}60`,
+            boxShadow: `0 10px 30px -4px rgba(${moodTheme.accentRgb}, 0.35)`,
+          }}
+          title="Open Aura AI Music Assistant"
         >
-          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse border-2 border-gray-900"></span>
+          {/* Ambient Shimmer Gradient */}
+          <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-600/15 via-pink-600/15 to-cyan/15 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+
+          {/* Glowing AI Avatar Orb in Mood Colors */}
+          <div
+            className={`relative flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-tr ${moodTheme.gradient} shadow-md`}
+          >
+            <span className="text-sm select-none">{moodTheme.spark}</span>
+            {/* Animated Glow Halo */}
+            <span
+              className="absolute -inset-1 rounded-full animate-ping opacity-40 pointer-events-none border"
+              style={{ borderColor: moodTheme.accent }}
+            />
+            {/* Live Status Pip */}
+            <span
+              className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-950 animate-pulse"
+              style={{ backgroundColor: moodTheme.accent }}
+            />
+          </div>
+
+          {/* Sleek Modern Labels */}
+          <div className="flex flex-col items-start text-left leading-tight pr-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-white tracking-wide group-hover:text-slate-100 transition-colors">
+                Aura AI
+              </span>
+              <span
+                className="text-[8px] font-mono font-bold px-1.5 py-0.2 rounded-full border uppercase tracking-wider"
+                style={{
+                  color: moodTheme.accent,
+                  backgroundColor: `rgba(${moodTheme.accentRgb}, 0.15)`,
+                  borderColor: `rgba(${moodTheme.accentRgb}, 0.35)`,
+                }}
+              >
+                {moodTheme.name}
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-400 group-hover:text-slate-300 transition-colors mt-0.5 flex items-center gap-1">
+              <span
+                className="w-1.5 h-1.5 rounded-full inline-block animate-pulse"
+                style={{ backgroundColor: moodTheme.accent }}
+              />
+              <span>Ask anything • Voice</span>
+            </span>
+          </div>
         </button>
       )}
 
+      {/* ============================================================== */}
+      {/* MODERN GLASSMORPHIC AI CHATBOT DIALOG                         */}
+      {/* ============================================================== */}
       {isOpen && (
-        <div className="fixed bottom-20 sm:bottom-24 right-4 sm:right-6 w-[92vw] sm:w-96 max-h-[75vh] h-[580px] bg-gray-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-purple-500/40 flex flex-col z-50">
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-purple-900/50 to-pink-900/50 rounded-t-2xl">
+        <div
+          className={`fixed ${bottomOffsetClass} right-4 sm:right-6 w-[94vw] sm:w-[410px] max-h-[82vh] h-[600px] rounded-3xl bg-slate-950/92 backdrop-blur-3xl border shadow-2xl flex flex-col z-50 overflow-hidden animate-fadeIn`}
+          style={{
+            borderColor: `${moodTheme.accent}40`,
+            boxShadow: `0 25px 80px rgba(0,0,0,0.85), 0 0 45px rgba(${moodTheme.accentRgb}, 0.25)`,
+          }}
+        >
+          {/* Modernized Header matching active mood */}
+          <div className={`flex items-center justify-between p-3.5 sm:p-4 border-b border-white/10 bg-gradient-to-r ${moodTheme.headerGrad}`}>
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div className="w-10 h-10 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center shadow-lg">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                  </svg>
+                <div
+                  className={`w-9 h-9 rounded-full bg-gradient-to-tr ${moodTheme.gradient} flex items-center justify-center shadow-lg`}
+                >
+                  <span className="text-sm select-none">{moodTheme.spark}</span>
                 </div>
-                <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-gray-900"></span>
+                <span
+                  className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-950 animate-pulse"
+                  style={{ backgroundColor: moodTheme.accent }}
+                />
               </div>
               <div>
-                <h3 className="text-white font-semibold">Music Assistant</h3>
-                <p className="text-xs text-green-400 flex items-center gap-1">
-                  <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                  Voice & Text
-                </p>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white tracking-wide">Aura AI Copilot</h3>
+                  <span
+                    className="text-[8px] font-mono px-1.5 py-0.2 rounded-full border"
+                    style={{
+                      color: moodTheme.accent,
+                      backgroundColor: `rgba(${moodTheme.accentRgb}, 0.2)`,
+                      borderColor: `rgba(${moodTheme.accentRgb}, 0.35)`,
+                    }}
+                  >
+                    {moodTheme.name}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400">Natural Voice & Smart Music Assistant</p>
               </div>
             </div>
-            <button
-              onClick={onToggle}
-              className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
-            >
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => {
+                  sessionStorage.removeItem('chatbotMessages');
+                  setMessages([
+                    {
+                      role: 'assistant',
+                      content: 'Hi! I\'m your music assistant. You can:\n• Say "play [song name]" for instant playback\n• Say "play playlist [name]" to play your playlists\n• Ask for recommendations\n• Search by artist, lyrics, or mood!',
+                      songs: [],
+                      playCommand: null,
+                      playlistName: null
+                    }
+                  ]);
+                }}
+                className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-slate-400 hover:text-red-400 transition-all text-xs cursor-pointer"
+                title="Clear chat"
+              >
+                🗑️
+              </button>
+              <button
+                onClick={onToggle}
+                className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-all text-xs cursor-pointer"
+                title="Close Assistant"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+          {/* Messages Container */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3.5 custom-scrollbar">
             {messages.map((message, index) => (
               <div
                 key={index}
                 className={`flex ${message.role === 'user' ? 'justify-end' : message.role === 'system' ? 'justify-center' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[85%] p-3 rounded-lg shadow-lg ${
+                  className={`max-w-[85%] p-3.5 rounded-2xl shadow-lg ${
                     message.role === 'user'
-                      ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-br-none'
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-br-sm'
                       : message.role === 'system'
-                      ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-300 rounded-lg'
-                      : 'bg-gray-800 text-gray-200 rounded-bl-none'
+                      ? 'bg-yellow-500/15 border border-yellow-500/30 text-yellow-300 text-xs rounded-xl'
+                      : 'bg-slate-900/90 border border-white/10 text-slate-100 rounded-bl-sm'
                   }`}
                 >
                   {renderMessage(message)}
                   {message.role !== 'system' && (
-                    <p className="text-xs mt-2 opacity-70">
+                    <p className="text-[10px] mt-1.5 opacity-60 text-right">
                       {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   )}
@@ -475,11 +649,12 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
             ))}
             {(isLoading || isTranscribing) && (
               <div className="flex justify-start">
-                <div className="bg-gray-800 p-3 rounded-lg rounded-bl-none shadow-lg">
+                <div className="bg-slate-900/90 border border-white/10 p-3 rounded-2xl rounded-bl-sm shadow-lg flex items-center gap-2">
+                  <span className="text-xs text-purple-300">Aura AI is thinking</span>
                   <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                    <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce"></div>
+                    <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
                   </div>
                 </div>
               </div>
@@ -487,109 +662,94 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
-          <div className="p-4 border-t border-gray-700 bg-gray-900/50 rounded-b-2xl">
-            {/* Info Section */}
-            <div className="mb-3 space-y-2">
-              {currentMood && (
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-gray-400">Current mood:</span>
-                  <span className="px-2 py-1 bg-purple-500/20 border border-purple-500/30 text-purple-300 rounded-full capitalize">
-                    {currentMood.mood || currentMood}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-gray-400">Voice language:</span>
-                  <select
-                    value={selectedLanguage}
-                    onChange={(e) => setSelectedLanguage(e.target.value)}
-                    className="px-2 py-1 bg-gray-800 border border-gray-700 text-gray-300 rounded text-xs focus:outline-none focus:border-purple-500"
-                    disabled={isRecording || isTranscribing}
-                  >
-                    <option value="auto">Auto-detect</option>
-                    <option value="en">English</option>
-                    <option value="hi">Hindi</option>
-                  </select>
-                </div>
-                <button
-                  onClick={() => {
-                    sessionStorage.removeItem('chatbotMessages');
-                    setMessages([
-                      {
-                        role: 'assistant',
-                        content: 'Hi! I\'m your music assistant. You can:\n• Say "play [song name]" for instant playback\n• Say "play playlist [name]" to play your playlists\n• Ask for recommendations\n• Search by artist, lyrics, or mood!',
-                        songs: [],
-                        playCommand: null,
-                        playlistName: null
-                      }
-                    ]);
-                  }}
-                  className="flex items-center gap-1 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 hover:border-red-500/50 text-red-400 hover:text-red-300 rounded-lg transition-all text-xs"
-                  title="Clear chat history"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  <span>Clear</span>
-                </button>
-              </div>
-            </div>
-            <div className="flex gap-2">
+          {/* Suggestion Prompt Chips */}
+          <div className="px-3 py-1.5 border-t border-white/5 bg-slate-950/60 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            {SUGGESTION_PROMPTS.map((p) => (
+              <button
+                key={p.label}
+                onClick={() => handlePromptClick(p.text)}
+                disabled={isLoading || isRecording}
+                className="shrink-0 text-[10px] px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-white transition-all cursor-pointer whitespace-nowrap active:scale-95"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Modernized Input Footer */}
+          <div className="p-3 border-t border-white/10 bg-slate-950/90">
+            <div className="flex items-center gap-2 bg-slate-900/90 border border-white/15 focus-within:border-purple-400 focus-within:shadow-[0_0_20px_rgba(168,85,247,0.3)] rounded-2xl p-1.5 transition-all">
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Play song/playlist, recommend..."
-                className="flex-1 bg-gray-800 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 placeholder-gray-500 text-sm"
+                placeholder="Ask Aura or type a song title..."
+                className="flex-1 bg-transparent text-white px-3 py-1.5 focus:outline-none placeholder-slate-500 text-xs sm:text-sm"
                 disabled={isLoading || isRecording}
               />
-              
+
+              {/* Voice Mic Button */}
               <button
                 onClick={isRecording ? stopRecording : startRecording}
                 disabled={isLoading || isTranscribing}
-                className={`rounded-lg px-4 py-2 transition-all disabled:opacity-50 ${
+                className={`p-2 rounded-xl transition-all cursor-pointer disabled:opacity-50 ${
                   isRecording
-                    ? 'bg-red-600 hover:bg-red-700 animate-pulse'
-                    : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:opacity-90'
-                } text-white`}
+                    ? 'bg-red-600 text-white animate-pulse shadow-lg shadow-red-500/50'
+                    : 'bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white'
+                }`}
+                title={isRecording ? 'Stop recording' : 'Voice search'}
               >
                 {isRecording ? (
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
-                  </svg>
+                  <span className="text-xs">⏹️</span>
                 ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                   </svg>
                 )}
               </button>
 
+              {/* Send Button */}
               <button
                 onClick={handleSend}
                 disabled={isLoading || !input.trim() || isRecording}
-                className="bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg px-4 py-2 hover:opacity-90 transition-opacity disabled:opacity-50"
+                className="p-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md hover:opacity-95 transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer active:scale-95"
+                title="Send message"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-2 text-center">
+
+            {/* Language & Status Indicator */}
+            <div className="flex items-center justify-between mt-2 px-1 text-[10px] text-slate-400">
+              <div className="flex items-center gap-1.5">
+                <span>Language:</span>
+                <select
+                  value={selectedLanguage}
+                  onChange={(e) => setSelectedLanguage(e.target.value)}
+                  className="bg-slate-900 border border-white/10 text-slate-300 rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                  disabled={isRecording || isTranscribing}
+                >
+                  <option value="auto">Auto-detect</option>
+                  <option value="en">English</option>
+                  <option value="hi">Hindi</option>
+                </select>
+              </div>
+
               {isRecording ? (
                 <span className="text-red-400 font-semibold animate-pulse">
-                  🔴 Recording... Click to stop
+                  🔴 Recording voice...
                 </span>
               ) : isTranscribing ? (
-                <span className="text-yellow-400 font-semibold">
-                  ⏳ Transcribing audio...
+                <span className="text-yellow-400 font-semibold animate-pulse">
+                  ⏳ Transcribing...
                 </span>
               ) : (
-                "Try: \"Play Bohemian Rhapsody\" or \"Play my Workout playlist\""
+                <span className="text-slate-500">Instant AI stream integration</span>
               )}
-            </p>
+            </div>
           </div>
         </div>
       )}

@@ -208,14 +208,20 @@ const DenseTracklist = ({
               <div className="flex items-center gap-3 min-w-0 flex-1 md:col-span-4">
                 <img
                   src={
-                    song.image ||
-                    'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&auto=format&fit=crop&q=80'
+                    song.image && !song.image.includes('1511671782779')
+                      ? song.image
+                      : (song.youtube_id
+                          ? `https://i.ytimg.com/vi/${song.youtube_id}/hqdefault.jpg`
+                          : `https://ui-avatars.com/api/?name=${encodeURIComponent(song.name || 'Song')}&background=0f172a&color=38bdf8&size=120&font-size=0.35&bold=true`)
                   }
                   alt={song.name}
                   className="w-11 h-11 rounded-lg object-cover bg-obsidian-800 flex-shrink-0 shadow-sm"
                   onError={(e) => {
-                    e.target.src =
-                      'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&auto=format&fit=crop&q=80';
+                    if (song.youtube_id && !e.target.src.includes('ytimg.com')) {
+                      e.target.src = `https://i.ytimg.com/vi/${song.youtube_id}/hqdefault.jpg`;
+                    } else {
+                      e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(song.name || 'Song')}&background=0f172a&color=38bdf8&size=120&font-size=0.35&bold=true`;
+                    }
                   }}
                 />
                 <div className="min-w-0">

@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { store } from './store/store';
 import AppShell from './components/AppShell';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Pages
 import HomePage from './pages/HomePage';
@@ -15,25 +16,27 @@ import MusicPlayerPage from './pages/MusicPlayerPage';
 
 function App() {
   return (
-    <Provider store={store}>
-      <Router>
-        <AppShell>
-          <Routes>
-            {/* Main Flow */}
-            <Route path="/" element={<HomePage />} />
-            <Route path="/discover" element={<DiscoverPage />} />
-            <Route path="/mood-detection" element={<MoodDetectionPage />} />
-            <Route path="/preferences" element={<PreferencesPage />} />
-            <Route path="/recommendations" element={<RecommendationsPage />} />
-            <Route path="/player" element={<MusicPlayerPage />} />
+    <ErrorBoundary>
+      <Provider store={store}>
+        <Router>
+          <AppShell>
+            <Routes>
+              {/* Main Flow */}
+              <Route path="/" element={<HomePage />} />
+              <Route path="/discover" element={<DiscoverPage />} />
+              <Route path="/mood-detection" element={<MoodDetectionPage />} />
+              <Route path="/preferences" element={<PreferencesPage />} />
+              <Route path="/recommendations" element={<RecommendationsPage />} />
+              <Route path="/player" element={<MusicPlayerPage />} />
 
-            {/* Auth & Features */}
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/playlists" element={<PlaylistsPage />} />
-          </Routes>
-        </AppShell>
-      </Router>
-    </Provider>
+              {/* Auth & Features */}
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/playlists" element={<PlaylistsPage />} />
+            </Routes>
+          </AppShell>
+        </Router>
+      </Provider>
+    </ErrorBoundary>
   );
 }
 

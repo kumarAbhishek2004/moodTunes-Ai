@@ -5,6 +5,7 @@ import Webcam from 'react-webcam';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 import { playSong, setQueue, setActiveMood } from '../store/audioSlice';
+import { resolveMusicTheme } from '../utils/themeMap';
 import FavoriteTracksSection from '../components/FavoriteTracksSection';
 import RotaryMoodDial from '../components/RotaryMoodDial';
 import Chatbot from '../components/Chatbot';
@@ -116,9 +117,15 @@ const HomePage = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
-  const activeMoodKey = useSelector((state) => state.audio.activeMood) || 'happy';
+  const rawActiveMood = useSelector((state) => state.audio.activeMood);
+  const activeMoodKey = typeof rawActiveMood === 'object' && rawActiveMood !== null
+    ? String(rawActiveMood.mood || rawActiveMood.id || 'happy').toLowerCase()
+    : String(rawActiveMood || 'happy').toLowerCase();
   const currentSong = useSelector((state) => state.audio.currentSong);
   const isPlaying = useSelector((state) => state.audio.isPlaying);
+
+  // Unified Theme based on active mood & playing track
+  const theme = resolveMusicTheme(currentSong, activeMoodKey);
 
   const [personalizedPicks, setPersonalizedPicks] = useState(DEFAULT_AURA_PICKS);
 
@@ -141,9 +148,24 @@ const HomePage = () => {
   const [sceneInput, setSceneInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [toneMetrics, setToneMetrics] = useState({
+    energy: 0.2,
+    pitch: 160,
+    tempo: 0.5,
+    energyLabel: 'Calibrating acoustics...',
+    pitchLabel: 'Listening for vocal cadence...',
+  });
+  const [audioWaveform, setAudioWaveform] = useState([18, 28, 42, 22, 54, 34, 68, 46, 26, 18, 30, 20]);
+  const [isAnalyzingVoice, setIsAnalyzingVoice] = useState(false);
+  const [voiceResultFeedback, setVoiceResultFeedback] = useState(null);
 
   const webcamRef = useRef(null);
   const recognitionRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  const isRecordingRef = useRef(false);
 
   const displayName = user?.full_name ? user.full_name.split(' ')[0] : 'Abhishek';
   const mood = MOOD_META[activeMoodKey.toLowerCase()] || MOOD_META.happy;
@@ -326,49 +348,243 @@ const HomePage = () => {
   };
 
   // ==============================================================
-  // 4. VOICE PIPELINE -> DIRECT TO RECOMMENDATION ENGINE
+  // 4. REAL-TIME ACOUSTIC TONE ANALYSIS (Web Audio API)
+  // Extracts volume energy (RMS), zero-crossing pitch, & speech tempo
+  // ==============================================================
+  const startToneAnalysis = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      audioContextRef.current = audioCtx;
+
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.8;
+      analyserRef.current = analyser;
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      const freqData = new Uint8Array(analyser.frequencyBinCount);
+      const timeDomain = new Uint8Array(analyser.fftSize);
+
+      const energyHistory = [];
+      const pitchHistory = [];
+      let activeFrames = 0;
+      let totalFrames = 0;
+
+      const analyzeFrame = () => {
+        if (!analyserRef.current || !isRecordingRef.current) return;
+        analyser.getByteFrequencyData(freqData);
+        analyser.getByteTimeDomainData(timeDomain);
+
+        // 1. RMS Energy
+        let sumSquares = 0;
+        for (let i = 0; i < timeDomain.length; i++) {
+          const norm = (timeDomain[i] - 128) / 128;
+          sumSquares += norm * norm;
+        }
+        const rms = Math.sqrt(sumSquares / timeDomain.length);
+        energyHistory.push(rms);
+        if (energyHistory.length > 70) energyHistory.shift();
+
+        totalFrames++;
+        if (rms > 0.04) activeFrames++;
+
+        // 2. Fundamental pitch via Zero-Crossing Rate
+        let crossings = 0;
+        for (let i = 1; i < timeDomain.length; i++) {
+          if ((timeDomain[i - 1] < 128 && timeDomain[i] >= 128) || (timeDomain[i - 1] >= 128 && timeDomain[i] < 128)) {
+            crossings++;
+          }
+        }
+        const approxHz = (crossings / 2) * (audioCtx.sampleRate / timeDomain.length);
+        if (approxHz >= 70 && approxHz <= 550 && rms > 0.035) {
+          pitchHistory.push(approxHz);
+          if (pitchHistory.length > 40) pitchHistory.shift();
+        }
+
+        // Live visual waveform (12 bands)
+        const step = Math.max(1, Math.floor(freqData.length / 12));
+        const bars = [];
+        for (let i = 0; i < 12; i++) {
+          const val = freqData[i * step] || 0;
+          bars.push(Math.max(14, Math.min(100, Math.round((val / 255) * 100))));
+        }
+        setAudioWaveform(bars);
+
+        const avgEnergy = energyHistory.reduce((a, b) => a + b, 0) / (energyHistory.length || 1);
+        const avgPitch = pitchHistory.length > 0
+          ? pitchHistory.reduce((a, b) => a + b, 0) / pitchHistory.length
+          : 160;
+        const speechRatio = totalFrames > 0 ? activeFrames / totalFrames : 0.5;
+
+        let energyLabel = 'Moderate Natural Energy';
+        if (avgEnergy > 0.26) energyLabel = 'High Energy & Vibrant';
+        else if (avgEnergy < 0.11) energyLabel = 'Soft & Gentle Acoustic';
+
+        let pitchLabel = 'Warm & Balanced Tone';
+        if (avgPitch > 200) pitchLabel = 'Bright & Expressive Pitch';
+        else if (avgPitch < 130) pitchLabel = 'Deep & Steady Resonant Pitch';
+
+        setToneMetrics({
+          energy: avgEnergy,
+          pitch: avgPitch,
+          tempo: speechRatio,
+          energyLabel,
+          pitchLabel,
+        });
+
+        animationFrameRef.current = requestAnimationFrame(analyzeFrame);
+      };
+
+      animationFrameRef.current = requestAnimationFrame(analyzeFrame);
+    } catch (err) {
+      console.warn('Microphone tone analysis access notice:', err);
+    }
+  };
+
+  const stopToneAnalysis = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+      } catch (e) {}
+      audioContextRef.current = null;
+    }
+  };
+
+  // ==============================================================
+  // 5. CONTINUOUS VOICE + ACOUSTIC TONE AGENT (Only detects on STOP!)
   // ==============================================================
   const handleVoiceToggle = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
+      alert('Speech recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.');
       return;
     }
 
     if (isRecording) {
-      recognitionRef.current?.stop();
-      setIsRecording(false);
+      handleStopAndDetectVoice();
       return;
     }
 
     setIsVoiceOpen(true);
     setVoiceTranscript('');
     setIsRecording(true);
+    isRecordingRef.current = true;
+    setIsAnalyzingVoice(false);
+    setVoiceResultFeedback(null);
+
+    // Start Real-Time Web Audio Tone Analysis
+    startToneAnalysis();
 
     const recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
+    recognition.continuous = true;
     recognition.interimResults = true;
 
     recognition.onresult = (e) => {
       const transcript = Array.from(e.results)
         .map((result) => result[0].transcript)
-        .join('');
+        .join(' ');
       setVoiceTranscript(transcript);
-      if (e.results[0].isFinal) {
-        setIsRecording(false);
-        setIsVoiceOpen(false);
-        handleTypeSubmit(transcript);
-      }
+      // STRICT REQUIREMENT: We NEVER stop automatically on isFinal.
+      // Continuous listening stays active until user explicitly clicks Stop!
     };
 
-    recognition.onerror = () => setIsRecording(false);
-    recognition.onend = () => setIsRecording(false);
+    recognition.onerror = (e) => {
+      console.warn('Speech recognition notice:', e.error);
+    };
+
+    recognition.onend = () => {
+      // If user has not clicked stop, seamlessly keep listening
+      if (isRecordingRef.current) {
+        try {
+          recognition.start();
+        } catch (e) {}
+      }
+    };
 
     recognitionRef.current = recognition;
     try {
       recognition.start();
     } catch (e) {
-      setIsRecording(false);
+      console.warn('Recognition start error:', e);
+    }
+  };
+
+  const handleStopAndDetectVoice = async () => {
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    try {
+      recognitionRef.current?.stop();
+    } catch (e) {}
+    stopToneAnalysis();
+
+    setIsAnalyzingVoice(true);
+    try {
+      // Transmit spoken words + vocal acoustic tone features to multimodal endpoint
+      const res = await axios.post(`${API_BASE_URL}/api/detect-voice-mood`, {
+        text: voiceTranscript || '',
+        tone_features: {
+          energy: toneMetrics.energy,
+          pitch: toneMetrics.pitch,
+          tempo: toneMetrics.tempo,
+        },
+      });
+
+      const detectedMood = (res.data.mood || 'happy').toLowerCase();
+      const rawConf = res.data.confidence;
+      const confString = rawConf !== undefined && rawConf !== null
+        ? `${Math.round(rawConf)}% Confidence (Voice & Tone)`
+        : '92% Confidence (Voice & Tone)';
+
+      setDetectionSource('voice');
+      setFaceConfidence(confString);
+      dispatch(setActiveMood(detectedMood));
+
+      localStorage.setItem('selectedMood', JSON.stringify({
+        mood: detectedMood,
+        confidence: rawConf,
+        source: 'voice',
+        tone_analysis: res.data.tone_analysis,
+        words_analysis: res.data.words_analysis,
+        mood_distribution: res.data.mood_distribution || { [detectedMood]: 100 },
+      }));
+
+      setVoiceResultFeedback({
+        mood: detectedMood,
+        explanation: res.data.explanation,
+        tone: res.data.tone_analysis,
+        words: res.data.words_analysis,
+      });
+
+      // After user sees confirmed mood feedback, smoothly transition to preferences
+      setTimeout(() => {
+        setIsVoiceOpen(false);
+        setIsAnalyzingVoice(false);
+        navigate('/preferences');
+      }, 1400);
+
+    } catch (err) {
+      console.error('Voice mood detection failed:', err);
+      if (voiceTranscript) {
+        handleTypeSubmit(voiceTranscript);
+      } else {
+        setIsVoiceOpen(false);
+        setIsAnalyzingVoice(false);
+      }
     }
   };
 
@@ -400,6 +616,25 @@ const HomePage = () => {
 
         {/* Subtle cinematic vignette */}
         <div className="absolute inset-0 bg-radial-vignette opacity-35" />
+
+        {/* Dynamic atmospheric mood lighting overlay - morphs backdrop lighting per mood */}
+        <div
+          className="absolute inset-0 pointer-events-none transition-all duration-1000 ease-in-out"
+          style={{
+            background:
+              activeMoodKey.toLowerCase() === 'romantic'
+                ? 'radial-gradient(circle at 75% 30%, rgba(236,72,153,0.35) 0%, rgba(244,63,94,0.18) 45%, transparent 75%)'
+                : activeMoodKey.toLowerCase() === 'energetic'
+                ? 'radial-gradient(circle at 75% 30%, rgba(249,115,22,0.35) 0%, rgba(245,158,11,0.18) 45%, transparent 75%)'
+                : activeMoodKey.toLowerCase() === 'calm'
+                ? 'radial-gradient(circle at 75% 30%, rgba(0,242,254,0.30) 0%, rgba(16,185,129,0.16) 45%, transparent 75%)'
+                : activeMoodKey.toLowerCase() === 'focus'
+                ? 'radial-gradient(circle at 75% 30%, rgba(16,185,129,0.30) 0%, rgba(6,182,212,0.16) 45%, transparent 75%)'
+                : activeMoodKey.toLowerCase() === 'sad'
+                ? 'radial-gradient(circle at 75% 30%, rgba(59,130,246,0.35) 0%, rgba(99,102,241,0.18) 45%, transparent 75%)'
+                : 'radial-gradient(circle at 75% 30%, rgba(245,158,11,0.30) 0%, rgba(236,72,153,0.16) 45%, transparent 75%)',
+          }}
+        />
       </div>
 
       {/* Main Container Stage */}
@@ -407,7 +642,7 @@ const HomePage = () => {
         {/* ============================================================== */}
         {/* TOP HERO ROW: Left Headline + Right Low-Profile Tactile Dial   */}
         {/* ============================================================== */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-end pt-2 sm:pt-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start pt-2 sm:pt-4">
           {/* LEFT: Greeting, Headline & Primary Choices */}
           <div className="lg:col-span-7 xl:col-span-7 space-y-3 sm:space-y-4 pb-1">
             <div>
@@ -425,35 +660,34 @@ const HomePage = () => {
             {/* Clear Primary Choices: Detect Mood with Face OR Manually Select */}
             <div className="space-y-2.5 pt-1">
               <div className="flex flex-wrap items-center gap-2.5">
-                {/* 1. 📸 Detect Mood with Face (Primary AI Scanner) */}
+                {/* 1. 📸 Detect Mood with Face (Primary AI Scanner) - Theme Unified */}
                 <button
                   type="button"
                   onClick={() => setIsCameraOpen(true)}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-500 text-white font-bold text-xs sm:text-sm shadow-[0_4px_25px_rgba(168,85,247,0.45)] hover:shadow-[0_6px_30px_rgba(168,85,247,0.65)] hover:scale-105 active:scale-95 transition-all duration-300 border border-purple-400/40 cursor-pointer"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full text-white font-bold text-xs sm:text-sm hover:scale-105 active:scale-95 transition-all duration-300 border cursor-pointer"
+                  style={{
+                    background: `linear-gradient(135deg, ${theme.accent}, ${theme.secondary || theme.accent})`,
+                    borderColor: `${theme.accent}66`,
+                    boxShadow: `0 4px 25px ${theme.glow || 'rgba(0,0,0,0.4)'}`,
+                  }}
                 >
                   <span className="text-base">📸</span>
                   <span>Detect Mood with Face</span>
                 </button>
 
-                {/* 2. 🎛️ Manually Select Mood */}
+                {/* 2. 🎛️ Manually Select Mood - Theme Unified */}
                 <button
                   type="button"
                   onClick={() => setIsManualModalOpen(true)}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white font-semibold text-xs sm:text-sm backdrop-blur-xl shadow-lg hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer"
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white font-semibold text-xs sm:text-sm backdrop-blur-xl shadow-lg hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer border"
+                  style={{
+                    borderColor: `${theme.accent}40`,
+                  }}
                 >
                   <span>🎛️</span>
                   <span>Select from Grid</span>
                 </button>
 
-                {/* 3. 💬 AI Music Chatbot */}
-                <button
-                  type="button"
-                  onClick={() => setIsChatbotOpen(true)}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-gradient-to-r from-purple-600/30 via-pink-600/30 to-purple-600/30 hover:from-purple-600/50 hover:to-pink-600/50 border border-purple-400/40 text-purple-200 hover:text-white font-semibold text-xs sm:text-sm backdrop-blur-xl shadow-lg hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer"
-                >
-                  <span className="text-base">💬</span>
-                  <span>AI Music Chatbot</span>
-                </button>
               </div>
 
               {/* Supplementary Inputs (Voice & Type) */}
@@ -475,21 +709,13 @@ const HomePage = () => {
                   <span>✍️</span>
                   <span>Type</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setIsChatbotOpen(true)}
-                  className="px-2.5 py-1 rounded-full bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 hover:text-white transition-all flex items-center gap-1 cursor-pointer"
-                >
-                  <span>💬</span>
-                  <span>AI Chatbot</span>
-                </button>
               </div>
             </div>
           </div>
 
-          {/* RIGHT COLUMN: Micro Tactile Emotion Tuner + Adjusted Chatbot Hub */}
-          <div className="lg:col-span-5 xl:col-span-5 flex flex-col items-center lg:items-end justify-end space-y-2 mt-2 lg:mt-0">
-            {/* 1. Micro-Profile Tactile Tuner Dial Card */}
+          {/* RIGHT COLUMN: Micro Tactile Emotion Tuner (Clean, Unobstructed) */}
+          <div className="lg:col-span-5 xl:col-span-5 flex justify-center lg:justify-end items-start mt-1 lg:mt-0">
+            {/* Micro-Profile Tactile Tuner Dial Card */}
             <div className="relative w-full max-w-[240px] sm:max-w-[250px] rounded-2xl bg-slate-950/60 backdrop-blur-xl border border-white/12 p-2 sm:p-2.5 shadow-2xl transition-all duration-500 hover:border-purple-500/35 group overflow-hidden flex flex-col items-center">
               {/* Dynamic Bloom Halo matching active mood */}
               <div
@@ -570,40 +796,6 @@ const HomePage = () => {
                   </button>
                 </div>
               </div>
-            </div>
-
-            {/* 2. Embedded AI Chatbot Assistant Hub Card (Adjusted right below the dial) */}
-            <div className="relative w-full max-w-[240px] sm:max-w-[250px] rounded-xl bg-slate-950/65 backdrop-blur-xl border border-purple-500/30 p-2 shadow-xl transition-all duration-300 hover:border-purple-500/50">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  <span className="text-[9.5px] font-bold text-white font-mono uppercase tracking-wider">
-                    💬 AI Music Chatbot
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsChatbotOpen(true)}
-                  className="text-[8.5px] text-purple-300 hover:text-white px-1.5 py-0.5 rounded bg-purple-500/20 border border-purple-500/35 transition-all hover:bg-purple-500/40 cursor-pointer font-medium"
-                >
-                  Chat ↗
-                </button>
-              </div>
-
-              <p className="text-[8.5px] text-slate-400 truncate mb-1.5">
-                Play songs, request artists, or get vibe picks
-              </p>
-
-              <button
-                type="button"
-                onClick={() => setIsChatbotOpen(true)}
-                className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-[9.5px] transition-all cursor-pointer group"
-              >
-                <span className="truncate text-slate-400 group-hover:text-slate-200">
-                  Ask: "Play romantic songs" or voice...
-                </span>
-                <span className="text-purple-400 text-xs ml-1">🎙️</span>
-              </button>
             </div>
           </div>
         </div>
@@ -743,59 +935,132 @@ const HomePage = () => {
       {/* MODAL 3: VOICE LISTENER MODAL                                  */}
       {/* ============================================================== */}
       {isVoiceOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-2xl flex items-center justify-center p-4 animate-fadeIn">
-          <div className="relative w-full max-w-md rounded-3xl bg-obsidian-900 border border-white/15 p-6 shadow-2xl text-center space-y-5">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+        <div className="fixed inset-0 z-[70] bg-black/85 backdrop-blur-2xl flex items-center justify-center p-4 pb-28 sm:pb-12 animate-fadeIn">
+          <div className="relative w-full max-w-lg rounded-3xl bg-obsidian-900/95 border border-white/20 p-6 sm:p-7 shadow-2xl text-center space-y-5 backdrop-blur-3xl">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500" />
+                </span>
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
-                  Voice Mood Listener
+                  Voice & Tone Emotion Agent
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={() => {
-                  recognitionRef.current?.stop();
-                  setIsVoiceOpen(false);
+                  isRecordingRef.current = false;
                   setIsRecording(false);
+                  try {
+                    recognitionRef.current?.stop();
+                  } catch (e) {}
+                  stopToneAnalysis();
+                  setIsVoiceOpen(false);
+                  setIsAnalyzingVoice(false);
                 }}
-                className="text-slate-400 hover:text-white text-xs px-2.5 py-1 rounded-lg hover:bg-white/10"
+                className="text-slate-400 hover:text-white text-xs px-2.5 py-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
               >
-                ✕ Close
+                ✕ Cancel
               </button>
             </div>
 
-            <div className="py-6 flex flex-col items-center justify-center">
-              <div className="relative w-20 h-20 rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center animate-pulse">
-                <span className="text-3xl">🎙️</span>
-                <div className="absolute inset-0 rounded-full border-2 border-rose-400/60 animate-ping" />
+            {/* Visualizer & Mic Cluster */}
+            <div className="py-3 flex flex-col items-center justify-center space-y-4">
+              {/* Dynamic Live Audio Waveform Bars */}
+              <div className="flex items-center justify-center gap-1.5 h-16 w-full max-w-xs px-4 py-2 rounded-2xl bg-obsidian-950/70 border border-white/10">
+                {audioWaveform.map((barHeight, idx) => (
+                  <div
+                    key={idx}
+                    className="flex-1 rounded-full bg-gradient-to-t from-rose-500 to-amber-400 transition-all duration-75 shadow-sm"
+                    style={{
+                      height: `${barHeight}%`,
+                      opacity: isRecording ? 0.95 : 0.3,
+                    }}
+                  />
+                ))}
               </div>
 
-              <p className="text-sm font-semibold text-white mt-4">
-                Listening to your voice...
-              </p>
-              <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                Speak freely (e.g. &quot;I need calming acoustic tunes after a long day&quot;)
-              </p>
+              {/* Status & Subtitle */}
+              <div>
+                <p className="text-base font-bold text-white tracking-tight">
+                  {isAnalyzingVoice
+                    ? 'Analyzing Spoken Words & Vocal Acoustics...'
+                    : 'Listening to your voice & tone...'}
+                </p>
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                  Speak naturally at your own pace. Click{' '}
+                  <strong className="text-rose-400 font-semibold">Stop & Detect Mood</strong> when you are finished!
+                </p>
+              </div>
+
+              {/* Live Tone Acoustic Telemetry */}
+              <div className="grid grid-cols-2 gap-2.5 w-full text-left">
+                <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/10">
+                  <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 flex items-center gap-1">
+                    <span>⚡</span>
+                    <span>Vocal Energy</span>
+                  </div>
+                  <div className="text-xs font-semibold text-rose-300 mt-0.5 truncate">
+                    {toneMetrics.energyLabel}
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/10">
+                  <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 flex items-center gap-1">
+                    <span>🎵</span>
+                    <span>Vocal Pitch</span>
+                  </div>
+                  <div className="text-xs font-semibold text-amber-300 mt-0.5 truncate">
+                    {toneMetrics.pitchLabel}
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {voiceTranscript && (
-              <div className="p-3 rounded-xl bg-obsidian-950/80 border border-white/10 text-xs text-purple-300 font-mono italic">
-                &ldquo;{voiceTranscript}&rdquo;
+            {/* Live Transcript Display Box */}
+            <div className="p-3.5 rounded-2xl bg-obsidian-950/90 border border-white/10 text-left min-h-[58px] flex items-center">
+              {voiceTranscript ? (
+                <p className="text-xs font-mono text-cyan/95 italic leading-relaxed">
+                  &ldquo;{voiceTranscript}&rdquo;
+                </p>
+              ) : (
+                <p className="text-xs text-slate-500 italic">
+                  Say how you feel or what you are doing (e.g. &quot;Excited for workout&quot;, &quot;Soft romantic evening&quot;, &quot;Feeling calm and relaxed&quot;)...
+                </p>
+              )}
+            </div>
+
+            {/* Confirmed Result Feedback Badge */}
+            {voiceResultFeedback && (
+              <div className="p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/35 text-xs text-emerald-300 animate-fadeIn text-left space-y-1">
+                <div className="flex items-center gap-2 font-bold uppercase tracking-wider">
+                  <span>✓</span>
+                  <span>Detected Mood: {voiceResultFeedback.mood}</span>
+                </div>
+                <p className="text-[11px] text-emerald-200/90">{voiceResultFeedback.explanation}</p>
               </div>
             )}
 
+            {/* PROMINENT STOP & DETECT MOOD BUTTON */}
             <button
-              onClick={() => {
-                recognitionRef.current?.stop();
-                setIsRecording(false);
-                setIsVoiceOpen(false);
-                if (voiceTranscript) {
-                  handleTypeSubmit(voiceTranscript);
-                }
-              }}
-              className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition-colors"
+              type="button"
+              onClick={handleStopAndDetectVoice}
+              disabled={isAnalyzingVoice}
+              className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-rose-500 via-pink-600 to-amber-500 hover:from-rose-400 hover:to-amber-400 text-white font-bold text-sm shadow-[0_0_25px_rgba(244,63,94,0.4)] transition-all hover:scale-102 active:scale-98 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2.5"
             >
-              Stop & Go to Recommendations
+              {isAnalyzingVoice ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Synthesizing Voice & Tone...</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-3.5 h-3.5 rounded-sm bg-white" />
+                  <span>⏹ Stop & Detect Mood</span>
+                </>
+              )}
             </button>
           </div>
         </div>

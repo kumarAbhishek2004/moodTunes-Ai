@@ -1,16 +1,33 @@
 import { createSlice } from '@reduxjs/toolkit';
 import { resolveKnownYouTubeId } from '../utils/songMap';
 
-// Retrieve cached state if available
-const cachedQueue = localStorage.getItem('recommendations')
-  ? JSON.parse(localStorage.getItem('recommendations'))
-  : [];
+// Retrieve cached state safely without risking JSON parsing crashes
+const cachedQueue = (() => {
+  try {
+    const raw = localStorage.getItem('recommendations');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+})();
 
-const initialMood = localStorage.getItem('selectedMood')
-  ? (typeof JSON.parse(localStorage.getItem('selectedMood')) === 'string'
-      ? JSON.parse(localStorage.getItem('selectedMood'))
-      : JSON.parse(localStorage.getItem('selectedMood')).mood || 'happy')
-  : 'happy';
+const initialMood = (() => {
+  try {
+    const raw = localStorage.getItem('selectedMood');
+    if (!raw) return 'happy';
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === 'string') return parsed.toLowerCase();
+    if (parsed && typeof parsed === 'object') {
+      const m = parsed.mood || parsed.id;
+      if (m) return String(m).toLowerCase();
+    }
+    return 'happy';
+  } catch (e) {
+    return 'happy';
+  }
+})();
 
 const initialState = {
   currentSong: cachedQueue.length > 0 ? cachedQueue[0] : null,
@@ -57,8 +74,8 @@ export const audioSlice = createSlice({
       state.isVideoMode = false;
       state.isPlayerDismissed = false;
       
-      // Update mood if song carries a match
-      if (song.mood_match) {
+      // Only fallback-update mood if user hasn't actively dialed or chosen an atmosphere
+      if (song.mood_match && !state.activeMood) {
         state.activeMood = song.mood_match.toLowerCase();
       }
 
@@ -213,9 +230,11 @@ export const audioSlice = createSlice({
     },
 
     setActiveMood: (state, action) => {
-      state.activeMood = (action.payload || 'happy').toLowerCase();
+      const val = action.payload;
+      const raw = typeof val === 'object' && val !== null ? (val.mood || val.id || 'happy') : val;
+      state.activeMood = String(raw || 'happy').toLowerCase();
       try {
-        localStorage.setItem('selectedMood', JSON.stringify(state.activeMood));
+        localStorage.setItem('selectedMood', JSON.stringify({ mood: state.activeMood }));
       } catch (e) {}
     },
 
