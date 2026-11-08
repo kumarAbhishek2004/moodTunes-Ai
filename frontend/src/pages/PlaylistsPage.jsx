@@ -222,9 +222,9 @@ const PlaylistsPage = () => {
   const [isSearchingRemote, setIsSearchingRemote] = useState(false);
   const [mobileDetailView, setMobileDetailView] = useState(false);
 
-  // External imported playlist limit check (1 external playlist allowed)
-  const hasImportedPlaylist = useMemo(() => {
-    return (userPlaylists || []).some((p) => p.source === 'spotify' || p.source === 'youtube' || String(p.id || '').startsWith('imported-'));
+  // Number of imported playlists in library
+  const importedPlaylistsCount = useMemo(() => {
+    return (userPlaylists || []).filter((p) => p.source === 'spotify' || p.source === 'youtube' || String(p.id || '').startsWith('imported-')).length;
   }, [userPlaylists]);
   const [localSongsMap, setLocalSongsMap] = useState({});
   const [toastMsg, setToastMsg] = useState(null);
@@ -661,35 +661,45 @@ const PlaylistsPage = () => {
 
   // Live debounced search against catalog and backend for song addition
   useEffect(() => {
-    if (!addSongSearch.trim()) {
+    const trimmed = addSongSearch.trim();
+    if (!trimmed || trimmed.length < 2) {
       setRemoteSearchResults([]);
       setIsSearchingRemote(false);
       return;
     }
 
+    const abortController = new AbortController();
+
     const timer = setTimeout(async () => {
       setIsSearchingRemote(true);
       try {
         const res = await axios.get(`${API_BASE_URL}/search-music`, {
-          params: { query: addSongSearch.trim(), limit: 8 },
+          params: { query: trimmed, limit: 8 },
+          signal: abortController.signal,
+          timeout: 6000,
         });
         if (res.data?.results) {
           setRemoteSearchResults(res.data.results);
         }
       } catch (e) {
-        // Fallback to local catalog filter
-        const filtered = POPULAR_SEARCH_CATALOG.filter(
-          (s) =>
-            s.name.toLowerCase().includes(addSongSearch.toLowerCase()) ||
-            s.artist.toLowerCase().includes(addSongSearch.toLowerCase())
-        );
-        setRemoteSearchResults(filtered);
+        if (!axios.isCancel(e)) {
+          // Fallback to local catalog filter
+          const filtered = POPULAR_SEARCH_CATALOG.filter(
+            (s) =>
+              s.name.toLowerCase().includes(trimmed.toLowerCase()) ||
+              s.artist.toLowerCase().includes(trimmed.toLowerCase())
+          );
+          setRemoteSearchResults(filtered);
+        }
       } finally {
         setIsSearchingRemote(false);
       }
-    }, 280);
+    }, 380);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      abortController.abort();
+    };
   }, [addSongSearch]);
 
   const displayedAddCatalog = useMemo(() => {
@@ -807,25 +817,20 @@ const PlaylistsPage = () => {
             </div>
 
             <div className="flex items-center gap-2 self-start sm:self-auto">
-              {/* 1-Click Import Playlist Button (Restricted to 1 imported playlist) */}
-              {!hasImportedPlaylist ? (
-                <button
-                  onClick={() => setIsImportModalOpen(true)}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold bg-white/10 hover:bg-white/15 text-white border border-white/15 transition-all duration-300 shadow-md hover:scale-105 active:scale-95 cursor-pointer"
-                  title="Import public Spotify or YouTube playlist"
-                >
-                  <span>📥</span>
-                  <span>Import Playlist</span>
-                </button>
-              ) : (
-                <div
-                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 select-none shadow-sm"
-                  title="You already have 1 imported playlist. Remove it from your library if you want to import another."
-                >
-                  <span>✓</span>
-                  <span>Playlist Imported (1/1)</span>
-                </div>
-              )}
+              {/* 1-Click Import Playlist Button (Always Available) */}
+              <button
+                onClick={() => setIsImportModalOpen(true)}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold bg-white/10 hover:bg-white/15 text-white border border-white/15 transition-all duration-300 shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+                title="Import public Spotify or YouTube playlist"
+              >
+                <span>📥</span>
+                <span>Import Playlist</span>
+                {importedPlaylistsCount > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-cyan/20 text-cyan-300 font-mono">
+                    {importedPlaylistsCount}
+                  </span>
+                )}
+              </button>
 
               {/* Create Playlist Button */}
               <button
@@ -1536,11 +1541,24 @@ const PlaylistsPage = () => {
       <ImportPlaylistModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
-        hasImportedPlaylist={hasImportedPlaylist}
+        initialMood={activeMoodKey}
         onImportSuccess={(newPl) => {
+          if (newPl) {
+            setUserPlaylists((prev) => {
+              const prevArr = Array.isArray(prev) ? prev : [];
+              const updated = [newPl, ...prevArr.filter((p) => (p.id || p._id) !== newPl.id)];
+              saveUserCustomPlaylists(updated, user);
+              return updated;
+            });
+            if (newPl.mood) {
+              const m = newPl.mood.toLowerCase();
+              setActiveMoodFilter(m);
+              applyMoodGradingToWholeApp(m);
+            }
+            setSelectedPlaylistId(newPl.id);
+            showToast(`🎉 Imported "${newPl.name}" under ${newPl.mood || 'custom'}!`);
+          }
           fetchPlaylists();
-          setSelectedPlaylistId(newPl.id);
-          showToast(`🎉 Imported "${newPl.name}"!`);
         }}
       />
 

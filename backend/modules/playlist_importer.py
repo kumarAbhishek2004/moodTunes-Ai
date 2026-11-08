@@ -386,10 +386,10 @@ def extract_spotify_playlist(url: str, custom_name: Optional[str] = None) -> Tup
     return playlist_name, description, cover_image, tracks
 
 
-def import_external_playlist(url: str, custom_name: Optional[str] = None, user_id: str = "guest") -> Dict:
+def import_external_playlist(url: str, custom_name: Optional[str] = None, user_id: str = "guest", mood: Optional[str] = None) -> Dict:
     """
     Imports genuine tracks from a Spotify or YouTube playlist into MoodTunes.
-    Enforces that only 1 external imported playlist exists per user at a time.
+    Supports importing multiple playlists and assigning a custom mood tag.
     """
     url = url.strip()
     is_spotify = "spotify.com" in url
@@ -408,19 +408,29 @@ def import_external_playlist(url: str, custom_name: Optional[str] = None, user_i
     if not tracks:
         raise ValueError(f"No playable tracks could be extracted from this {source_platform} playlist. Please verify the URL is public.")
 
-    # Determine dominant mood
-    mood = infer_mood(playlist_name, description)
+    # Determine dominant mood: prioritize explicit user selection
+    valid_moods = ["calm", "happy", "energetic", "sad", "focus", "romantic"]
+    normalized_mood = mood.lower().strip() if (mood and isinstance(mood, str) and mood.strip()) else None
+    if normalized_mood in valid_moods:
+        final_mood = normalized_mood
+    else:
+        final_mood = infer_mood(playlist_name, description)
+
+    for trk in tracks:
+        trk["mood_match"] = final_mood
+        trk["mood"] = final_mood
 
     # Save to native playlists.json
     new_playlist_id = f"imported-{uuid.uuid4().hex[:8]}"
     new_playlist = {
         "id": new_playlist_id,
         "name": playlist_name,
-        "mood": mood,
+        "mood": final_mood,
         "description": f"Imported from {source_platform} • {len(tracks)} tracks ready to stream",
         "user_id": user_id,
         "is_public": True,
         "source": source_platform.lower(),
+        "cover": cover_image,
         "cover_image": cover_image,
         "songs": tracks,
         "created_at": "Just now"
@@ -442,14 +452,8 @@ def import_external_playlist(url: str, custom_name: Optional[str] = None, user_i
         target_uid = user_id or "default"
         user_list = current_data.setdefault(target_uid, [])
 
-        # Enforce single imported playlist: remove any existing imported playlists
-        user_list = [
-            p for p in user_list
-            if not (
-                p.get("source") in ["spotify", "youtube"]
-                or str(p.get("id", "")).startswith("imported-")
-            )
-        ]
+        # Allow multiple imported playlists: keep existing, only deduplicate identical playlist ID
+        user_list = [p for p in user_list if p.get("id") != new_playlist_id]
 
         # Insert new playlist at top of user's playlists
         user_list.insert(0, new_playlist)

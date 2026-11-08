@@ -30,6 +30,124 @@ const cachedQueue = (() => {
 
 
 
+const cachedCurrentSong = (() => {
+
+  try {
+
+    const raw = localStorage.getItem('currentSong');
+
+    if (!raw) return null;
+
+    return JSON.parse(raw);
+
+  } catch (e) {
+
+    return null;
+
+  }
+
+})();
+
+
+
+const cachedCurrentIndex = (() => {
+
+  try {
+
+    const raw = localStorage.getItem('currentIndex');
+
+    if (raw !== null && raw !== undefined) {
+
+      const idx = parseInt(raw, 10);
+
+      return !isNaN(idx) && idx >= 0 ? idx : 0;
+
+    }
+
+  } catch (e) {}
+
+  return 0;
+
+})();
+
+
+
+const cachedPlaybackPosition = (() => {
+
+  try {
+
+    const raw = localStorage.getItem('playbackPosition');
+
+    if (raw !== null && raw !== undefined) {
+
+      const pos = parseFloat(raw);
+
+      return !isNaN(pos) && pos > 0 ? pos : 0;
+
+    }
+
+  } catch (e) {}
+
+  return 0;
+
+})();
+
+
+
+// Calculate initial song and index accurately so refresh stays on current track
+
+const resolvedInitial = (() => {
+
+  if (!cachedQueue || cachedQueue.length === 0) {
+
+    return { song: cachedCurrentSong || null, index: 0 };
+
+  }
+
+
+
+  // 1. If we have a cached current song, match it within the queue
+
+  if (cachedCurrentSong) {
+
+    const matchIdx = cachedQueue.findIndex(
+
+      (s) => (s.id && s.id === cachedCurrentSong.id) ||
+
+             (s.name?.toLowerCase() === cachedCurrentSong.name?.toLowerCase() &&
+
+              s.artist?.toLowerCase() === cachedCurrentSong.artist?.toLowerCase())
+
+    );
+
+    if (matchIdx !== -1) {
+
+      return { song: cachedQueue[matchIdx], index: matchIdx };
+
+    }
+
+  }
+
+
+
+  // 2. If index is valid within cachedQueue
+
+  if (cachedCurrentIndex >= 0 && cachedCurrentIndex < cachedQueue.length) {
+
+    return { song: cachedQueue[cachedCurrentIndex], index: cachedCurrentIndex };
+
+  }
+
+
+
+  // 3. Fallback to first track
+
+  return { song: cachedQueue[0], index: 0 };
+
+})();
+
+
+
 const initialMood = (() => {
 
   try {
@@ -68,13 +186,13 @@ const cachedHistory = getUserHistory();
 
 const initialState = {
 
-  currentSong: cachedQueue.length > 0 ? cachedQueue[0] : null,
+  currentSong: resolvedInitial.song,
 
   queue: cachedQueue,
 
   playbackHistory: cachedHistory,
 
-  currentIndex: 0,
+  currentIndex: resolvedInitial.index,
 
   isPlaying: false,
 
@@ -82,11 +200,11 @@ const initialState = {
 
   isMuted: false,
 
-  currentTime: 0,
+  currentTime: cachedPlaybackPosition,
 
   duration: 240, // default placeholder until metadata loads
 
-  seekTarget: null, // trigger seek in engine
+  seekTarget: cachedPlaybackPosition > 0 ? cachedPlaybackPosition : null, // trigger seek in engine
 
   activeMood: initialMood,
 
@@ -330,7 +448,11 @@ export const audioSlice = createSlice({
 
         localStorage.setItem('currentSong', JSON.stringify(song));
 
+        localStorage.setItem('currentIndex', String(state.currentIndex));
+
         localStorage.setItem('recommendations', JSON.stringify(state.queue));
+
+        localStorage.setItem('playbackPosition', '0');
 
         saveUserHistory(updatedHist);
 
@@ -390,17 +512,47 @@ export const audioSlice = createSlice({
 
       state.queue = songs;
 
-      if (songs.length > 0 && !state.currentSong) {
+      if (songs.length > 0) {
 
-        state.currentSong = songs[0];
+        if (!state.currentSong) {
 
-        state.currentIndex = 0;
+          state.currentSong = songs[0];
+
+          state.currentIndex = 0;
+
+        } else {
+
+          const foundIdx = songs.findIndex(
+
+            (s) => s.id === state.currentSong.id ||
+
+                  (s.name?.toLowerCase() === state.currentSong.name?.toLowerCase() &&
+
+                   s.artist?.toLowerCase() === state.currentSong.artist?.toLowerCase())
+
+          );
+
+          if (foundIdx !== -1) {
+
+            state.currentIndex = foundIdx;
+
+          }
+
+        }
 
       }
 
       try {
 
         localStorage.setItem('recommendations', JSON.stringify(songs));
+
+        localStorage.setItem('currentIndex', String(state.currentIndex));
+
+        if (state.currentSong) {
+
+          localStorage.setItem('currentSong', JSON.stringify(state.currentSong));
+
+        }
 
       } catch (e) {}
 
@@ -750,6 +902,10 @@ export const audioSlice = createSlice({
 
         localStorage.setItem('currentSong', JSON.stringify(song));
 
+        localStorage.setItem('currentIndex', String(state.currentIndex));
+
+        localStorage.setItem('playbackPosition', '0');
+
       } catch (e) {}
 
     },
@@ -800,6 +956,16 @@ export const audioSlice = createSlice({
 
       }
 
+      try {
+
+        localStorage.setItem('currentSong', JSON.stringify(state.currentSong));
+
+        localStorage.setItem('currentIndex', String(state.currentIndex));
+
+        localStorage.setItem('playbackPosition', '0');
+
+      } catch (e) {}
+
     },
 
 
@@ -824,11 +990,25 @@ export const audioSlice = createSlice({
 
     setProgress: (state, action) => {
 
-      state.currentTime = action.payload.currentTime ?? state.currentTime;
+      const ct = action.payload.currentTime ?? state.currentTime;
+
+      state.currentTime = ct;
 
       if (action.payload.duration) {
 
         state.duration = action.payload.duration;
+
+      }
+
+      if (ct > 0 && Math.abs(ct - (state._lastSavedPos || 0)) >= 2) {
+
+        state._lastSavedPos = ct;
+
+        try {
+
+          localStorage.setItem('playbackPosition', String(Math.round(ct * 10) / 10));
+
+        } catch (e) {}
 
       }
 

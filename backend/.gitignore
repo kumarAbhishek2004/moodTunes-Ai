@@ -9,3 +9,4 @@ wheels/
 # Virtual environments
 .venv
 .env
+get_lakshman_transcript.py

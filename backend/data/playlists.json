@@ -1,6 +1,200 @@
 {
   "user_1794133687_c66785": [
     {
+      "id": "imported-b12751aa",
+      "name": "Songs",
+      "mood": "calm",
+      "description": "Imported from Spotify • 18 tracks ready to stream",
+      "user_id": "user_1794133687_c66785",
+      "is_public": true,
+      "source": "spotify",
+      "cover": "https://mosaic.scdn.co/640/ab67616d00001e020db929437955efc2696197c6ab67616d00001e0223dd6f470762fac5b0b23f83ab67616d00001e0228dca2c8ef21646d5c7db1aeab67616d00001e02b96494dc6eaedc90919365df",
+      "cover_image": "https://mosaic.scdn.co/640/ab67616d00001e020db929437955efc2696197c6ab67616d00001e0223dd6f470762fac5b0b23f83ab67616d00001e0228dca2c8ef21646d5c7db1aeab67616d00001e02b96494dc6eaedc90919365df",
+      "songs": [
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-0",
+          "name": "Lofi Lovee",
+          "artist": "Ved Sharma, Asees Kaur, Harsh Limbachiya",
+          "youtube_id": "wRqJVxxA08c",
+          "duration": 210,
+          "image": "https://i.ytimg.com/vi/wRqJVxxA08c/hqdefault.jpg",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-1",
+          "name": "Dil To Pagal Hai",
+          "artist": "Uttam Singh, Lata Mangeshkar, Udit Narayan, Anand Bakshi",
+          "youtube_id": "lZ2PhyBF3GQ",
+          "duration": 336,
+          "image": "https://i.ytimg.com/vi/lZ2PhyBF3GQ/hqdefault.jpg",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-2",
+          "name": "Bholi Si Surat",
+          "artist": "Uttam Singh, Lata Mangeshkar, Udit Narayan, Anand Bakshi",
+          "youtube_id": "-1J1XqOKnuw",
+          "duration": 255,
+          "image": "https://i.ytimg.com/vi/-1J1XqOKnuw/hqdefault.jpg",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-3",
+          "name": "Bye",
+          "artist": "Aditya Bhardwaj",
+          "youtube_id": "DbiRVNeZPnw",
+          "duration": 174,
+          "image": "https://i.ytimg.com/vi/DbiRVNeZPnw/hqdefault.jpg",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-4",
+          "name": "Hasi Ban Gaye",
+          "artist": "Ami Mishra, Kunaal Vermaa, KASYAP, VIBIE",
+          "youtube_id": "5c9iFQZE74E",
+          "duration": 165,
+          "image": "https://i.ytimg.com/vi/5c9iFQZE74E/hqdefault.jpg",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-5",
+          "name": "Barsaat Bhi Aakar",
+          "artist": "Abhijeet",
+          "youtube_id": "wc75u5yQ_fI",
+          "duration": 211,
+          "image": "https://i.ytimg.com/vi/wc75u5yQ_fI/hqdefault.jpg",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-6",
+          "name": "Hasi - Female Version",
+          "artist": "Ami Mishra, Shreya Ghoshal, Kunaal Vermaa",
+          "youtube_id": "Zvp-VBmoPmI",
+          "duration": 192,
+          "image": "https://i.ytimg.com/vi/Zvp-VBmoPmI/hqdefault.jpg",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-7",
+          "name": "Illegal Weapon 2.0 (From \"Street Dancer 3D\")",
+          "artist": "Jasmine Sandlas, Garry Sandhu, Tanishk Bagchi, Intense",
+          "youtube_id": "GOkJguI8kYc",
+          "duration": 188,
+          "image": "https://i.ytimg.com/vi/GOkJguI8kYc/hqdefault.jpg",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-8",
+          "name": "Raabta",
+          "artist": "Pritam, Arijit Singh",
+          "youtube_id": "vEe-UgJvUHE",
+          "duration": 243,
+          "image": "https://i.ytimg.com/vi/vEe-UgJvUHE/hqdefault.jpg",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-9",
+          "name": "Hawayein (From \"Jab Harry Met Sejal\")",
+          "artist": "Pritam, Arijit Singh",
+          "youtube_id": "cYOB941gyXI",
+          "duration": 290,
+          "image": "https://i.ytimg.com/vi/cYOB941gyXI/hqdefault.jpg",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-10",
+          "name": "Kya Khoob Lagti Ho",
+          "artist": "Mukesh, Kanchan, Kalyanji-Anandji",
+          "youtube_id": null,
+          "duration": 239,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e020db929437955efc2696197c6ab67616d00001e0223dd6f470762fac5b0b23f83ab67616d00001e0228dca2c8ef21646d5c7db1aeab67616d00001e02b96494dc6eaedc90919365df",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-11",
+          "name": "Kisi Ki Muskurahaton Se",
+          "artist": "Mukesh",
+          "youtube_id": null,
+          "duration": 269,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e020db929437955efc2696197c6ab67616d00001e0223dd6f470762fac5b0b23f83ab67616d00001e0228dca2c8ef21646d5c7db1aeab67616d00001e02b96494dc6eaedc90919365df",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-12",
+          "name": "Bhagwan Badi Fursat Se Tohra Ke Banvale Bade (From \"Pratigya\")",
+          "artist": "Pawan Singh",
+          "youtube_id": null,
+          "duration": 315,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e020db929437955efc2696197c6ab67616d00001e0223dd6f470762fac5b0b23f83ab67616d00001e0228dca2c8ef21646d5c7db1aeab67616d00001e02b96494dc6eaedc90919365df",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-13",
+          "name": "Zindagi Ek Safar Hai Suhana - Kishore Kumar",
+          "artist": "Kishore Kumar",
+          "youtube_id": null,
+          "duration": 260,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e020db929437955efc2696197c6ab67616d00001e0223dd6f470762fac5b0b23f83ab67616d00001e0228dca2c8ef21646d5c7db1aeab67616d00001e02b96494dc6eaedc90919365df",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-14",
+          "name": "Move - Yeh Ishq Ishq",
+          "artist": "Shashwat Sachdev, Reble, Sonu Nigam",
+          "youtube_id": null,
+          "duration": 204,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e020db929437955efc2696197c6ab67616d00001e0223dd6f470762fac5b0b23f83ab67616d00001e0228dca2c8ef21646d5c7db1aeab67616d00001e02b96494dc6eaedc90919365df",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-15",
+          "name": "Jhoot",
+          "artist": "harmeeet, Aditya Pushkarna",
+          "youtube_id": null,
+          "duration": 211,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e020db929437955efc2696197c6ab67616d00001e0223dd6f470762fac5b0b23f83ab67616d00001e0228dca2c8ef21646d5c7db1aeab67616d00001e02b96494dc6eaedc90919365df",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-16",
+          "name": "Long Way From Home",
+          "artist": "MC SQUARE, Radhika Bhide, Wicked Sunny, Cyril Gabriel",
+          "youtube_id": null,
+          "duration": 258,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e020db929437955efc2696197c6ab67616d00001e0223dd6f470762fac5b0b23f83ab67616d00001e0228dca2c8ef21646d5c7db1aeab67616d00001e02b96494dc6eaedc90919365df",
+          "mood_match": "calm",
+          "mood": "calm"
+        },
+        {
+          "id": "spot-2Jx9jNaXnKCHJigMWrrmMD-17",
+          "name": "Galat Launda",
+          "artist": "Fotty Seven, MojoJojo",
+          "youtube_id": null,
+          "duration": 141,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e020db929437955efc2696197c6ab67616d00001e0223dd6f470762fac5b0b23f83ab67616d00001e0228dca2c8ef21646d5c7db1aeab67616d00001e02b96494dc6eaedc90919365df",
+          "mood_match": "calm",
+          "mood": "calm"
+        }
+      ],
+      "created_at": "Just now"
+    },
+    {
       "id": "imported-b77fdf0a",
       "name": "Raps",
       "mood": "energetic",
@@ -162,9 +356,26 @@
           "duration": 398,
           "image": "https://mosaic.scdn.co/640/ab67616d00001e0219b148f705b4975d7bcc489eab67616d00001e027a94c393899fc359c25795afab67616d00001e02a29f8977d3f13760d01332e0ab67616d00001e02c9750cf7a3824ab5499302f9",
           "mood_match": "energetic"
+        },
+        {
+          "id": "yt_vWggt_oXzQw",
+          "name": "Fotty Seven | Hindi Rap | Prod MojoJojo",
+          "artist": "Galat Launda",
+          "lastfm_url": null,
+          "youtube_id": "vWggt_oXzQw",
+          "preview_url": "https://www.youtube.com/watch?v=vWggt_oXzQw",
+          "album": null,
+          "duration_ms": null,
+          "listeners": null,
+          "playcount": null,
+          "tags": [],
+          "audio_features": {},
+          "ai_explanation": null,
+          "mood_match": "energetic"
         }
       ],
-      "created_at": "Just now"
+      "created_at": "Just now",
+      "updated_at": "2026-11-10T06:31:39.586766"
     },
     {
       "id": "pl_1794207149_f0411c",

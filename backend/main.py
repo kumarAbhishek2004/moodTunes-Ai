@@ -2870,6 +2870,8 @@ class PlaylistImportRequest(BaseModel):
 
     playlist_name: Optional[str] = None
 
+    mood: Optional[str] = "calm"
+
 
 
 @app.post("/api/playlists/import")
@@ -2882,7 +2884,7 @@ async def import_playlist_endpoint(req: PlaylistImportRequest, current_user: Opt
 
     try:
 
-        res = import_external_playlist(req.url, req.playlist_name, user_id=user_id)
+        res = import_external_playlist(req.url, req.playlist_name, user_id=user_id, mood=req.mood)
 
         return res
 

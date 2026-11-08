@@ -164,11 +164,13 @@ const HorizontalNavbar = () => {
 
 
 
-  // Debounced music search
+  // Debounced music search with abort controller & minimum query length
 
   useEffect(() => {
 
-    if (!searchQuery.trim()) {
+    const trimmed = searchQuery.trim();
+
+    if (!trimmed || trimmed.length < 2) {
 
       setSearchResults([]);
 
@@ -178,6 +180,12 @@ const HorizontalNavbar = () => {
 
     }
 
+
+
+    const abortController = new AbortController();
+
+
+
     const timer = setTimeout(async () => {
 
       setIsSearching(true);
@@ -186,15 +194,23 @@ const HorizontalNavbar = () => {
 
         const response = await axios.get(`${API_BASE_URL}/search-music`, {
 
-          params: { query: searchQuery.trim(), limit: 6 },
+          params: { query: trimmed, limit: 6 },
+
+          signal: abortController.signal,
+
+          timeout: 6000,
 
         });
 
-        setSearchResults(response.data.results || []);
+        setSearchResults(response.data?.results || []);
 
       } catch (err) {
 
-        console.error('Search failed:', err);
+        if (!axios.isCancel(err)) {
+
+          console.warn('Search notice:', err?.message);
+
+        }
 
       } finally {
 
@@ -202,9 +218,17 @@ const HorizontalNavbar = () => {
 
       }
 
-    }, 280);
+    }, 380);
 
-    return () => clearTimeout(timer);
+
+
+    return () => {
+
+      clearTimeout(timer);
+
+      abortController.abort();
+
+    };
 
   }, [searchQuery]);
 

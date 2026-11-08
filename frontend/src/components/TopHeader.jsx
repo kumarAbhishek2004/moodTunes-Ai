@@ -72,29 +72,39 @@ const TopHeader = () => {
 
   // Debounced search
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    const trimmed = searchQuery.trim();
+    if (!trimmed || trimmed.length < 2) {
       setSearchResults([]);
       setIsSearching(false);
       return;
     }
 
+    const abortController = new AbortController();
+
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
         const response = await axios.get(`${API_BASE_URL}/search-music`, {
-          params: { query: searchQuery.trim(), limit: 8 },
+          params: { query: trimmed, limit: 8 },
+          signal: abortController.signal,
+          timeout: 6000,
         });
-        setSearchResults(response.data.results || []);
+        setSearchResults(response.data?.results || []);
         setIsDropdownOpen(true);
       } catch (err) {
-        console.error('Search failed:', err);
+        if (!axios.isCancel(err)) {
+          console.warn('Search notice:', err?.message);
+        }
         setSearchResults([]);
       } finally {
         setIsSearching(false);
       }
-    }, 300);
+    }, 380);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      abortController.abort();
+    };
   }, [searchQuery]);
 
   const handleSelectSong = (song) => {
