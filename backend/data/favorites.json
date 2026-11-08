@@ -1,13 +1,31 @@
 {
   "user_1794133687_c66785": [
     {
-      "id": "yt-BBAyRBTfsOU",
-      "name": "Vaaste Song: Dhvani Bhanushali, Tanishk Bagchi | Nikhil D&#39;Souza | Bhushan Kumar | Radhika R, Vinay S",
-      "artist": "nik",
-      "image": "https://i.ytimg.com/vi/BBAyRBTfsOU/hqdefault.jpg",
-      "youtube_id": "BBAyRBTfsOU",
+      "id": "fav-e-1",
+      "name": "Believer",
+      "artist": "Imagine Dragons",
+      "image": "https://i.ytimg.com/vi/7wtfhZwyrcc/hqdefault.jpg",
+      "youtube_id": "7wtfhZwyrcc",
+      "duration": 204,
+      "mood_match": "Energetic"
+    },
+    {
+      "id": "fav-e-2",
+      "name": "Machayenge 3",
+      "artist": "Emiway Bantai",
+      "image": "https://i.ytimg.com/vi/nJNooQDc0Bs/hqdefault.jpg",
+      "youtube_id": "nJNooQDc0Bs",
+      "duration": 185,
+      "mood_match": "Energetic"
+    },
+    {
+      "id": "yt-fQq8dLABoL8",
+      "name": "Parshuram - Raanjha || Ramayan Energetic Rap || Parshuram Jayanti || 2026",
+      "artist": "Ranjha",
+      "image": "https://i.ytimg.com/vi/fQq8dLABoL8/hqdefault.jpg",
+      "youtube_id": "fQq8dLABoL8",
       "duration": 210,
-      "mood_match": "Focus"
+      "mood_match": "Energetic"
     }
   ]
 }

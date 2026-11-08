@@ -14,6 +14,8 @@ import PreferencesPage from './pages/PreferencesPage';
 import RecommendationsPage from './pages/RecommendationsPage';
 import MusicPlayerPage from './pages/MusicPlayerPage';
 import AboutPage from './pages/AboutPage';
+import ListenTogetherPage from './pages/ListenTogetherPage';
+import RoadmapPage from './pages/RoadmapPage';
 
 function App() {
   return (
@@ -34,6 +36,8 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/playlists" element={<PlaylistsPage />} />
               <Route path="/about" element={<AboutPage />} />
+              <Route path="/room/:roomId" element={<ListenTogetherPage />} />
+              <Route path="/roadmap" element={<RoadmapPage />} />
             </Routes>
           </AppShell>
         </Router>

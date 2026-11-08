@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useLocation } from 'react-router-dom';
-import { toggleTurntable, playSong, setQueue } from '../store/audioSlice';
+import { toggleTurntable, playSong, setQueue, toggleChatbot, setChatbotOpen } from '../store/audioSlice';
 import { resolveMusicTheme } from '../utils/themeMap';
 import { playSongWithSimilarQueue } from '../utils/queueHelper';
 import PersistentAudioEngine from './PersistentAudioEngine';
@@ -15,6 +15,9 @@ import ShortcutsModal from './ShortcutsModal';
 import MoodElevationToast from './MoodElevationToast';
 import VibeCardModal from './VibeCardModal';
 import VoiceDJOverlay from './VoiceDJOverlay';
+import EqualizerModal from './EqualizerModal';
+import MoodJourneyModal from './MoodJourneyModal';
+import { setMoodJourneyModalOpen } from '../store/audioSlice';
 import { useVoiceDJ } from '../hooks/useVoiceDJ';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { checkAndTriggerMoodElevation } from '../utils/moodElevationEngine';
@@ -80,10 +83,11 @@ export const MOOD_GLOW_MAP = {
 const AppShell = ({ children }) => {
   const dispatch = useDispatch();
   const location = useLocation();
-  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+  const isChatbotOpen = useSelector((state) => state.audio.isChatbotOpen);
   const currentSong = useSelector((state) => state.audio.currentSong);
   const activeMood = useSelector((state) => state.audio.activeMood) || 'happy';
   const isTurntableOpen = useSelector((state) => state.audio.isTurntableOpen);
+  const isMoodJourneyModalOpen = useSelector((state) => state.audio.isMoodJourneyModalOpen);
   
   // Strict guideline: When music is playing, colors dynamically adapt to song's mood and genre!
   const glow = resolveMusicTheme(currentSong, activeMood);
@@ -164,7 +168,7 @@ const AppShell = ({ children }) => {
           {/* Global Floating Aura AI Chatbot Copilot (Available across every page) */}
           <Chatbot
             isOpen={isChatbotOpen}
-            onToggle={() => setIsChatbotOpen((prev) => !prev)}
+            onToggle={() => dispatch(toggleChatbot())}
             currentMood={activeMood}
             onPlaySong={(song) => {
               playSongWithSimilarQueue(dispatch, song, 10);
@@ -207,6 +211,15 @@ const AppShell = ({ children }) => {
 
           {/* Feature 6: Hands-Free Voice DJ ('Hey Abhi') Assistant Overlay (z-[120]) */}
           <VoiceDJOverlay />
+
+          {/* Feature 8: 5-Band Equalizer & Crossfade Modal (z-[130]) */}
+          <EqualizerModal />
+
+          {/* Feature 9: AI Mood Journey Elevation Roadmap Modal (z-[140]) */}
+          <MoodJourneyModal
+            isOpen={isMoodJourneyModalOpen}
+            onClose={() => dispatch(setMoodJourneyModalOpen(false))}
+          />
 
           {/* Keyboard Shortcut Active Feedback Pill (z-[110]) */}
           {shortcutToast && (

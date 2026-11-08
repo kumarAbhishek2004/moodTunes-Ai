@@ -2,57 +2,47 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
-  setVoiceDJEnabled,
   setVoiceDJStatus,
   setVoiceDJTranscript,
   setVoiceDJFeedback,
   clearVoiceDJFeedback,
+  openChatbot,
 } from '../store/audioSlice';
 import {
   playVoiceChime,
-  speakVoiceFeedback,
   parseVoiceCommand,
   executeVoiceAction,
   getAllAccessiblePlaylists,
   stripWakeWords,
-  isAssistantSpeakingNow,
 } from '../utils/voiceDJEngine';
 
 /**
- * Phonetic Wake Word Regex:
- * Recognizes "Abhi", "Hey Abhi", "Hi Abhi", "Ok Abhi", and phonetic variations
- * captured by speech recognition engines across accents.
- */
-const WAKE_WORD_REGEX =
-  /\b(?:hey\s+|ok\s+|hi\s+|okay\s+|yo\s+|hello\s+)?(?:abhi|abhishek|abby|abbie|avi|avhi|abey|obhi|obhey|abi|abhee|abhey|aabi|aabhi|api|avee|moodtunes|aura)\b/i;
-
-/**
  * useVoiceDJ Hook
- * Continuous hands-free voice assistant.
- * Activates automatically when hearing "Hey Abhi" without clicking,
- * responds with "Voice assistant is active.", and supports full voice playback controls,
- * database song search, and page navigation ("open playlist", "pause it", "play music").
+ * Simple, reliable Click-to-Speak Voice Assistant ("Hey Abhi").
+ * 
+ * Flow:
+ * 1. Idle by default (Microphone OFF, zero continuous background listening).
+ * 2. User clicks "Hey Abhi" button -> starts listening + plays rising chime.
+ * 3. Shows live speech transcript in real-time.
+ * 4. User speaks their command (e.g., "play Kesariya", "pause", "open roadmap").
+ * 5. As soon as speech finishes, stops mic, parses & executes action, plays confirm chime.
+ * 6. Shows confirmation badge for 3 seconds, then cleanly returns to idle.
  */
 export const useVoiceDJ = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const audioState = useSelector((state) => state.audio);
   const authUser = useSelector((state) => state.auth?.user);
-  const { isEnabled, wakeStatus } = audioState.voiceDJ || {};
+  const { wakeStatus } = audioState.voiceDJ || {};
 
   const recognitionRef = useRef(null);
-  const isEnabledRef = useRef(isEnabled);
   const audioStateRef = useRef(audioState);
-  const isListeningWindowRef = useRef(false);
+  const isListeningRef = useRef(false);
   const isExecutingRef = useRef(false);
-  const listeningCooldownUntilRef = useRef(0);
-  const listeningWindowTimerRef = useRef(null);
   const silenceTimerRef = useRef(null);
-  const autoCollapseTimerRef = useRef(null);
-  const restartTimerRef = useRef(null);
+  const autoDismissTimerRef = useRef(null);
   const playlistsRef = useRef([]);
 
-  isEnabledRef.current = isEnabled;
   audioStateRef.current = audioState;
 
   // Refresh accessible playlists for voice matching
@@ -67,21 +57,36 @@ export const useVoiceDJ = () => {
     refreshPlaylists();
   }, [refreshPlaylists]);
 
-  // Execute parsed speech command strictly within database & navigation
+  // Cleanly stops speech recognition and releases mic
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (e) {}
+      recognitionRef.current = null;
+    }
+    isListeningRef.current = false;
+    clearTimeout(silenceTimerRef.current);
+  }, []);
+
+  // Execute parsed speech command
   const executeCommand = useCallback(
     async (speechText) => {
-      if (isExecutingRef.current || !speechText || speechText.trim().length < 2) return;
+      if (isExecutingRef.current || !speechText || speechText.trim().length < 2) {
+        stopListening();
+        return;
+      }
       isExecutingRef.current = true;
-      listeningCooldownUntilRef.current = Date.now() + 3500; // Cooldown prevents audio feedback loop
-      isListeningWindowRef.current = false;
-      clearTimeout(listeningWindowTimerRef.current);
-      clearTimeout(silenceTimerRef.current);
+      stopListening();
 
       dispatch(setVoiceDJStatus('processing'));
       dispatch(setVoiceDJTranscript(speechText));
 
       await refreshPlaylists();
-      const parsed = parseVoiceCommand(speechText);
+
+      // Clean out any wake words like "hey abhi", "abhi", etc.
+      const cleaned = stripWakeWords(speechText) || speechText;
+      const parsed = parseVoiceCommand(cleaned);
 
       if (parsed) {
         await executeVoiceAction(
@@ -91,265 +96,211 @@ export const useVoiceDJ = () => {
           playlistsRef.current,
           navigate
         );
-
-        clearTimeout(autoCollapseTimerRef.current);
-        autoCollapseTimerRef.current = setTimeout(() => {
-          dispatch(clearVoiceDJFeedback());
-          isExecutingRef.current = false;
-        }, 3500);
+        playVoiceChime('success');
       } else {
-        isExecutingRef.current = false;
-        dispatch(clearVoiceDJFeedback());
+        // Fallback for conversational queries (e.g. "who are you", "recommend a romantic song")
+        dispatch(openChatbot());
+        try {
+          window.dispatchEvent(
+            new CustomEvent('moodtunes:aura-chat-query', {
+              detail: { query: cleaned },
+            })
+          );
+        } catch (e) {}
+        dispatch(
+          setVoiceDJFeedback({
+            text: `Asked Aura AI: "${cleaned}"`,
+            type: 'control',
+            status: 'success',
+          })
+        );
+        playVoiceChime('success');
       }
+
+      clearTimeout(autoDismissTimerRef.current);
+      autoDismissTimerRef.current = setTimeout(() => {
+        dispatch(clearVoiceDJFeedback());
+        isExecutingRef.current = false;
+      }, 3500);
     },
-    [dispatch, navigate, refreshPlaylists]
+    [dispatch, navigate, refreshPlaylists, stopListening]
   );
 
-  // Trigger wake window when "Hey Abhi" is spoken
-  const triggerWakeWindow = useCallback(() => {
-    isListeningWindowRef.current = true;
-    playVoiceChime('wake');
-    speakVoiceFeedback('Voice assistant is active.');
-    dispatch(
-      setVoiceDJFeedback({
-        text: '🎙️ Voice assistant active • Speak your command',
-        type: 'info',
-        status: 'listening',
-      })
-    );
+  // Starts single-utterance speech recognition when "Hey Abhi" is clicked
+  const startListening = useCallback(() => {
+    // If currently executing, wait
+    if (isExecutingRef.current) return;
 
-    clearTimeout(listeningWindowTimerRef.current);
-    listeningWindowTimerRef.current = setTimeout(() => {
-      isListeningWindowRef.current = false;
+    // If already listening, stop (toggle behavior)
+    if (isListeningRef.current) {
+      stopListening();
       dispatch(clearVoiceDJFeedback());
-    }, 8000);
-  }, [dispatch]);
-
-  // Initialize and maintain continuous speech listener
-  useEffect(() => {
-    if (!isEnabled) {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch (e) {}
-        recognitionRef.current = null;
-      }
       return;
     }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      console.warn('Speech recognition not supported in this browser.');
+      dispatch(
+        setVoiceDJFeedback({
+          text: 'Speech recognition is not supported in this browser.',
+          type: 'error',
+          status: 'error',
+        })
+      );
+      setTimeout(() => dispatch(clearVoiceDJFeedback()), 4000);
       return;
     }
 
-    let isCancelled = false;
+    stopListening();
+    clearTimeout(autoDismissTimerRef.current);
 
-    // Auto-verify or prompt microphone permission without locking the hardware
-    const checkMicPermission = async () => {
-      if (navigator.permissions && navigator.permissions.query) {
-        try {
-          const perm = await navigator.permissions.query({ name: 'microphone' });
-          if (perm.state === 'prompt' && navigator.mediaDevices?.getUserMedia) {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            stream.getTracks().forEach((track) => track.stop());
-          }
-        } catch (e) {
-          if (navigator.mediaDevices?.getUserMedia) {
-            try {
-              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-              stream.getTracks().forEach((track) => track.stop());
-            } catch (err) {}
-          }
+    // Play rising wake chime & set status
+    playVoiceChime('wake');
+    dispatch(setVoiceDJTranscript(''));
+    dispatch(setVoiceDJStatus('listening'));
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-IN'; // Indian English: ideal for Hindi & English song titles
+    recognition.continuous = false; // Natural single-phrase recognition
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 3;
+
+    recognition.onstart = () => {
+      isListeningRef.current = true;
+      // Safety timeout: if user stays silent for 7 seconds, gracefully close
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = setTimeout(() => {
+        stopListening();
+        dispatch(
+          setVoiceDJFeedback({
+            text: "Didn't catch that. Click 'Hey Abhi' to speak.",
+            type: 'info',
+            status: 'idle',
+          })
+        );
+        setTimeout(() => dispatch(clearVoiceDJFeedback()), 2800);
+      }, 7000);
+    };
+
+    recognition.onresult = (event) => {
+      let liveTranscript = '';
+      let isFinal = false;
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        if (res[0]?.transcript) {
+          liveTranscript += res[0].transcript + ' ';
         }
-      } else if (navigator.mediaDevices?.getUserMedia) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          stream.getTracks().forEach((track) => track.stop());
-        } catch (err) {}
+        if (res.isFinal) isFinal = true;
+      }
+
+      liveTranscript = liveTranscript.trim();
+      if (!liveTranscript) return;
+
+      // Update live caption
+      dispatch(setVoiceDJTranscript(liveTranscript));
+
+      clearTimeout(silenceTimerRef.current);
+
+      if (isFinal) {
+        executeCommand(liveTranscript);
+      } else {
+        // Finalize after 900ms pause if browser interim doesn't mark final
+        silenceTimerRef.current = setTimeout(() => {
+          executeCommand(liveTranscript);
+        }, 900);
       }
     };
 
-    checkMicPermission();
+    recognition.onerror = (event) => {
+      isListeningRef.current = false;
+      clearTimeout(silenceTimerRef.current);
 
-    const startRecognizer = () => {
-      if (isCancelled || !isEnabledRef.current) return;
-
-      // Cleanly abort previous instance if any
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch (e) {}
-        recognitionRef.current = null;
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        dispatch(
+          setVoiceDJFeedback({
+            text: 'Microphone permission required. Please allow microphone in your browser.',
+            type: 'error',
+            status: 'error',
+          })
+        );
+        setTimeout(() => dispatch(clearVoiceDJFeedback()), 4500);
+        return;
       }
 
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'en-IN'; // Indian English: ideal for Hindi & English music queries
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 3;
-
-      recognition.onstart = () => {
-        // Ready in background silently, awaits "Hey Abhi" or direct commands
-      };
-
-      recognition.onresult = (event) => {
-        if (!isEnabledRef.current || isExecutingRef.current) return;
-
-        // Skip while assistant is speaking to prevent self-trigger loop
-        if (isAssistantSpeakingNow()) return;
-
-        // Cooldown guard prevents music audio from re-triggering commands
-        if (Date.now() < listeningCooldownUntilRef.current) return;
-
-        let liveTranscript = '';
-        let isFinal = false;
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const res = event.results[i];
-          if (res[0]?.transcript) {
-            liveTranscript += res[0].transcript + ' ';
-          }
-          if (res.isFinal) isFinal = true;
-        }
-
-        liveTranscript = liveTranscript.trim();
-        if (!liveTranscript) return;
-
-        // Update real-time transcript caption on overlay
-        dispatch(setVoiceDJTranscript(liveTranscript));
-
-        const lower = liveTranscript.toLowerCase();
-
-        // Check if any alternative contains wake word ("Hey Abhi")
-        let matchedWake = WAKE_WORD_REGEX.test(lower);
-        if (!matchedWake && event.results[event.resultIndex]) {
-          for (let a = 0; a < event.results[event.resultIndex].length; a++) {
-            if (WAKE_WORD_REGEX.test(event.results[event.resultIndex][a]?.transcript || '')) {
-              matchedWake = true;
-              break;
-            }
-          }
-        }
-
-        if (matchedWake) {
-          const stripped = stripWakeWords(lower);
-
-          if (stripped.length > 2) {
-            // Full command with wake word: e.g. "Hey Abhi play music" / "Hey Abhi pause it" / "Hey Abhi open playlist"
-            clearTimeout(silenceTimerRef.current);
-            if (isFinal) {
-              executeCommand(liveTranscript);
-            } else {
-              silenceTimerRef.current = setTimeout(() => {
-                executeCommand(liveTranscript);
-              }, 500);
-            }
-          } else {
-            // Wake word alone: "Hey Abhi" -> activates and speaks "Voice assistant is active."
-            if (!isListeningWindowRef.current) {
-              triggerWakeWindow();
-            }
-          }
-        } else if (isListeningWindowRef.current) {
-          // Assistant is in active listening window after "Hey Abhi" was spoken
-          clearTimeout(silenceTimerRef.current);
-          if (isFinal) {
-            executeCommand(liveTranscript);
-          } else {
-            silenceTimerRef.current = setTimeout(() => {
-              executeCommand(liveTranscript);
-            }, 550);
-          }
-        } else {
-          // Direct command fallback: e.g. "pause", "play music", "open playlist", "next song"
-          const directMatch = parseVoiceCommand(liveTranscript);
-          if (directMatch && directMatch.type !== 'WAKE_ONLY' && (isFinal || liveTranscript.split(' ').length >= 2)) {
-            clearTimeout(silenceTimerRef.current);
-            if (isFinal) {
-              executeCommand(liveTranscript);
-            } else {
-              silenceTimerRef.current = setTimeout(() => {
-                executeCommand(liveTranscript);
-              }, 600);
-            }
-          }
-        }
-      };
-
-      recognition.onerror = (event) => {
-        // 'no-speech' is normal when user is silent; ignore it
-        if (event.error === 'no-speech' || event.error === 'aborted') {
-          return;
-        }
-        console.warn('Speech recognition status:', event.error);
-        if (event.error === 'not-allowed') {
-          dispatch(
-            setVoiceDJFeedback({
-              text: '⚠️ Microphone access needed. Please click "Allow" on the microphone prompt.',
-              type: 'error',
-              status: 'error',
-            })
-          );
-        }
-      };
-
-      recognition.onend = () => {
-        // Automatically restart speech recognition for continuous uninterrupted listening
-        if (!isCancelled && isEnabledRef.current) {
-          clearTimeout(restartTimerRef.current);
-          restartTimerRef.current = setTimeout(() => {
-            if (!isCancelled && isEnabledRef.current) {
-              startRecognizer();
-            }
-          }, 150);
-        }
-      };
-
-      recognitionRef.current = recognition;
-
-      try {
-        recognition.start();
-      } catch (err) {
-        if (err.name !== 'InvalidStateError') {
-          console.warn('Recognition start caught:', err);
-        }
+      if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        dispatch(
+          setVoiceDJFeedback({
+            text: 'Could not hear voice command. Please try again.',
+            type: 'error',
+            status: 'error',
+          })
+        );
+        setTimeout(() => dispatch(clearVoiceDJFeedback()), 3000);
+      } else {
+        dispatch(clearVoiceDJFeedback());
       }
     };
 
-    startRecognizer();
+    recognition.onend = () => {
+      isListeningRef.current = false;
+      clearTimeout(silenceTimerRef.current);
+    };
 
-    // User gesture safety fallback: ensure recognizer starts if browser delayed autoplay
-    const handleFirstGesture = () => {
-      if (isEnabledRef.current && !recognitionRef.current) {
-        startRecognizer();
+    recognitionRef.current = recognition;
+
+    try {
+      recognition.start();
+    } catch (err) {
+      isListeningRef.current = false;
+      console.warn('SpeechRecognition start error:', err);
+    }
+  }, [dispatch, executeCommand, stopListening]);
+
+  // Global event bus listeners for "Hey Abhi" button clicks across the app
+  useEffect(() => {
+    const handleToggle = () => {
+      if (isListeningRef.current) {
+        stopListening();
+        dispatch(clearVoiceDJFeedback());
+      } else {
+        startListening();
       }
     };
-    window.addEventListener('click', handleFirstGesture, { once: true });
-    window.addEventListener('keydown', handleFirstGesture, { once: true });
+
+    const handleStart = () => startListening();
+    const handleStop = () => {
+      stopListening();
+      dispatch(clearVoiceDJFeedback());
+    };
+
+    window.addEventListener('moodtunes:toggle-voice-dj', handleToggle);
+    window.addEventListener('moodtunes:start-voice-dj', handleStart);
+    window.addEventListener('moodtunes:stop-voice-dj', handleStop);
 
     return () => {
-      isCancelled = true;
-      window.removeEventListener('click', handleFirstGesture);
-      window.removeEventListener('keydown', handleFirstGesture);
+      window.removeEventListener('moodtunes:toggle-voice-dj', handleToggle);
+      window.removeEventListener('moodtunes:start-voice-dj', handleStart);
+      window.removeEventListener('moodtunes:stop-voice-dj', handleStop);
+      stopListening();
+      clearTimeout(autoDismissTimerRef.current);
       clearTimeout(silenceTimerRef.current);
-      clearTimeout(listeningWindowTimerRef.current);
-      clearTimeout(autoCollapseTimerRef.current);
-      clearTimeout(restartTimerRef.current);
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch (e) {}
-        recognitionRef.current = null;
-      }
     };
-  }, [isEnabled, executeCommand, triggerWakeWindow, dispatch]);
+  }, [startListening, stopListening, dispatch]);
 
   return {
-    isEnabled,
+    isListening: wakeStatus === 'listening',
     wakeStatus,
-    toggleEnabled: () => dispatch(setVoiceDJEnabled(!isEnabled)),
-    triggerManualListening: triggerWakeWindow,
+    toggleListening: () => {
+      if (isListeningRef.current) {
+        stopListening();
+        dispatch(clearVoiceDJFeedback());
+      } else {
+        startListening();
+      }
+    },
+    startListening,
+    stopListening,
     refreshPlaylists,
   };
 };

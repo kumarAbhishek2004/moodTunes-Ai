@@ -4,6 +4,7 @@ import { playSong, setQueue, addToPlayNext, addToQueue, moveQueueItem, openVibeC
 import AddToPlaylistButton from './AddToPlaylistButton';
 import { resolveMusicTheme } from '../utils/themeMap';
 import { resolveTrackArtwork, handleArtworkError } from '../utils/imageHelper';
+import { cleanSongTitle } from '../utils/textHelper';
 
 const formatDuration = (seconds) => {
   if (!seconds || isNaN(seconds)) return '3:45';
@@ -412,7 +413,7 @@ const DenseTracklist = ({
                     className={`text-xs sm:text-sm font-semibold truncate transition-colors`}
                     style={{ color: isCurrent ? theme.accent : undefined }}
                   >
-                    {song.name}
+                    {cleanSongTitle(song.name)}
                   </p>
                   <p className="text-xs text-slate-400 truncate">{song.artist}</p>
                 </div>

@@ -14,7 +14,10 @@ const VoiceDJOverlay = () => {
   if (!voiceDJ?.isEnabled) return null;
 
   const { wakeStatus, transcript, feedbackText, feedbackType } = voiceDJ;
-  const isInteracting = wakeStatus === 'listening' || wakeStatus === 'processing' || feedbackText;
+  const isInteracting = wakeStatus === 'listening' || wakeStatus === 'processing' || Boolean(feedbackText);
+
+  // Keep screen clean: Overlay is only visible when actively listening, processing, or showing feedback
+  if (!isInteracting) return null;
 
   // Accent mood colors for glowing aura
   const getGlowColor = () => {
@@ -33,16 +36,15 @@ const VoiceDJOverlay = () => {
 
   return (
     <div className="fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-[120] w-[92vw] sm:w-auto max-w-lg pointer-events-auto select-none font-sans animate-fadeIn">
-      {isInteracting ? (
-        // Dynamic Expanded Assistant Pill
-        <div className="relative rounded-3xl bg-slate-950/95 border border-cyan/30 p-4 sm:p-5 shadow-2xl backdrop-blur-2xl text-white overflow-hidden animate-fadeIn transition-all duration-300">
-          {/* Ambient Glow Aura */}
-          <div
-            className={`absolute -top-16 -left-16 w-44 h-44 rounded-full blur-3xl opacity-35 bg-gradient-to-br ${getGlowColor()}`}
-          />
-          <div
-            className={`absolute -bottom-16 -right-16 w-44 h-44 rounded-full blur-3xl opacity-35 bg-gradient-to-br ${getGlowColor()}`}
-          />
+      {/* Dynamic Expanded Assistant Pill */}
+      <div className="relative rounded-3xl bg-slate-950/95 border border-cyan/30 p-4 sm:p-5 shadow-2xl backdrop-blur-2xl text-white overflow-hidden animate-fadeIn transition-all duration-300">
+        {/* Ambient Glow Aura */}
+        <div
+          className={`absolute -top-16 -left-16 w-44 h-44 rounded-full blur-3xl opacity-35 bg-gradient-to-br ${getGlowColor()}`}
+        />
+        <div
+          className={`absolute -bottom-16 -right-16 w-44 h-44 rounded-full blur-3xl opacity-35 bg-gradient-to-br ${getGlowColor()}`}
+        />
 
           <div className="relative z-10 flex items-center justify-between gap-3 mb-2.5">
             <div className="flex items-center gap-2.5">
@@ -73,7 +75,7 @@ const VoiceDJOverlay = () => {
             </div>
 
             <button
-              onClick={() => dispatch(clearVoiceDJFeedback())}
+              onClick={() => { window.dispatchEvent(new CustomEvent('moodtunes:stop-voice-dj')); dispatch(clearVoiceDJFeedback()); }}
               className="w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer text-xs"
               title="Dismiss"
             >
@@ -130,35 +132,6 @@ const VoiceDJOverlay = () => {
             </div>
           )}
         </div>
-      ) : (
-        // Subtle Idle Indicator Pill (Always active, hands-free)
-        <div className="flex items-center justify-center">
-          <div
-            className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-slate-950/90 hover:bg-slate-900 border border-cyan/40 text-xs text-slate-300 shadow-2xl backdrop-blur-xl transition-all"
-            title="Hands-free 'Hey Abhi' is active and listening for your voice commands"
-          >
-            {/* Live Visualizer Waves */}
-            <span className="flex items-center gap-0.5 h-3">
-              <span className="w-1 h-2 bg-cyan rounded-full animate-pulse" />
-              <span className="w-1 h-3 bg-cyan rounded-full animate-ping" />
-              <span className="w-1 h-1.5 bg-cyan rounded-full animate-pulse" />
-            </span>
-            <span className="font-mono font-bold text-cyan">Hey Abhi</span>
-            <span className="text-slate-300 hidden sm:inline">• Say &ldquo;Hey Abhi&rdquo; or &ldquo;Play [song]&rdquo; anytime</span>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                dispatch(setVoiceDJEnabled(false));
-              }}
-              className="ml-1 text-slate-500 hover:text-rose-400 text-xs cursor-pointer p-0.5"
-              title="Turn off Hands-Free Voice DJ"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -1,20 +1,186 @@
 {
-  "user_1794096797_9f295a": [
+  "user_1794133687_c66785": [
     {
-      "id": "pl_1794096797_e0d2cb",
-      "user_id": "user_1794096797_9f295a",
-      "name": "Test Rock Beats",
-      "description": "Testing persistence across restarts",
+      "id": "imported-b77fdf0a",
+      "name": "Raps",
+      "mood": "energetic",
+      "description": "Imported from Spotify • 17 tracks ready to stream",
+      "user_id": "user_1794133687_c66785",
+      "is_public": true,
+      "source": "spotify",
+      "cover_image": "https://mosaic.scdn.co/640/ab67616d00001e0219b148f705b4975d7bcc489eab67616d00001e027a94c393899fc359c25795afab67616d00001e02a29f8977d3f13760d01332e0ab67616d00001e02c9750cf7a3824ab5499302f9",
+      "songs": [
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-0",
+          "name": "I Guess",
+          "artist": "KR$NA, Kabu Beats",
+          "youtube_id": "Y_JzW5vW_9w",
+          "duration": 186,
+          "image": "https://i.ytimg.com/vi/Y_JzW5vW_9w/hqdefault.jpg",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-1",
+          "name": "SILENCE",
+          "artist": "YUNG SAMMY, Wamp",
+          "youtube_id": "0mkkL_BquI0",
+          "duration": 112,
+          "image": "https://i.ytimg.com/vi/0mkkL_BquI0/hqdefault.jpg",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-2",
+          "name": "Sad Gaana",
+          "artist": "Bali, AN1K8T",
+          "youtube_id": "rQvzmXrwcjo",
+          "duration": 149,
+          "image": "https://i.ytimg.com/vi/rQvzmXrwcjo/hqdefault.jpg",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-3",
+          "name": "Triple OG",
+          "artist": "DIVINE",
+          "youtube_id": "vFiirZ5tyJI",
+          "duration": 183,
+          "image": "https://i.ytimg.com/vi/vFiirZ5tyJI/hqdefault.jpg",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-4",
+          "name": "Tu Hai Kaun",
+          "artist": "Fotty Seven, Raga",
+          "youtube_id": "TWDo5EF9kBE",
+          "duration": 204,
+          "image": "https://i.ytimg.com/vi/TWDo5EF9kBE/hqdefault.jpg",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-5",
+          "name": "Pendulum",
+          "artist": "Panther",
+          "youtube_id": "Sc0azslzhu0",
+          "duration": 166,
+          "image": "https://i.ytimg.com/vi/Sc0azslzhu0/hqdefault.jpg",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-6",
+          "name": "Shameless",
+          "artist": "Bali, Enzo",
+          "youtube_id": "N8DDpLCASNs",
+          "duration": 141,
+          "image": "https://i.ytimg.com/vi/N8DDpLCASNs/hqdefault.jpg",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-7",
+          "name": "Buckchodi",
+          "artist": "Bali, Enzo",
+          "youtube_id": null,
+          "duration": 151,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e0219b148f705b4975d7bcc489eab67616d00001e027a94c393899fc359c25795afab67616d00001e02a29f8977d3f13760d01332e0ab67616d00001e02c9750cf7a3824ab5499302f9",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-8",
+          "name": "Podcast",
+          "artist": "Bali, Enzo",
+          "youtube_id": "UalZ-cPzxk4",
+          "duration": 168,
+          "image": "https://i.ytimg.com/vi/UalZ-cPzxk4/hqdefault.jpg",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-9",
+          "name": "KALESHI CHORI",
+          "artist": "DG IMMORTALS, Raga, Harjas Harjaayi, VIRTUAL_AF, DARK HORSE",
+          "youtube_id": "702uU0t65og",
+          "duration": 211,
+          "image": "https://i.ytimg.com/vi/702uU0t65og/hqdefault.jpg",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-10",
+          "name": "Hutt Hutt",
+          "artist": "Bali",
+          "youtube_id": null,
+          "duration": 183,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e0219b148f705b4975d7bcc489eab67616d00001e027a94c393899fc359c25795afab67616d00001e02a29f8977d3f13760d01332e0ab67616d00001e02c9750cf7a3824ab5499302f9",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-11",
+          "name": "Brahman Yodha",
+          "artist": "Pandat Ji, Abhishek Chudiyala, Mayank Kaudinya",
+          "youtube_id": null,
+          "duration": 151,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e0219b148f705b4975d7bcc489eab67616d00001e027a94c393899fc359c25795afab67616d00001e02a29f8977d3f13760d01332e0ab67616d00001e02c9750cf7a3824ab5499302f9",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-12",
+          "name": "Raat Ki Rani",
+          "artist": "Seedhe Maut",
+          "youtube_id": null,
+          "duration": 211,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e0219b148f705b4975d7bcc489eab67616d00001e027a94c393899fc359c25795afab67616d00001e02a29f8977d3f13760d01332e0ab67616d00001e02c9750cf7a3824ab5499302f9",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-13",
+          "name": "Jhoot",
+          "artist": "harmeeet, Aditya Pushkarna",
+          "youtube_id": null,
+          "duration": 211,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e0219b148f705b4975d7bcc489eab67616d00001e027a94c393899fc359c25795afab67616d00001e02a29f8977d3f13760d01332e0ab67616d00001e02c9750cf7a3824ab5499302f9",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-14",
+          "name": "Doctor-Doctor",
+          "artist": "Ansh4sure, Aditya Pushkarna",
+          "youtube_id": null,
+          "duration": 176,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e0219b148f705b4975d7bcc489eab67616d00001e027a94c393899fc359c25795afab67616d00001e02a29f8977d3f13760d01332e0ab67616d00001e02c9750cf7a3824ab5499302f9",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-15",
+          "name": "Paardarshi",
+          "artist": "Lash curry, Aditya Pushkarna",
+          "youtube_id": null,
+          "duration": 246,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e0219b148f705b4975d7bcc489eab67616d00001e027a94c393899fc359c25795afab67616d00001e02a29f8977d3f13760d01332e0ab67616d00001e02c9750cf7a3824ab5499302f9",
+          "mood_match": "energetic"
+        },
+        {
+          "id": "spot-6WLLSPAlJCX4bydymT0qUa-16",
+          "name": "Machayenge 4",
+          "artist": "KR$NA",
+          "youtube_id": null,
+          "duration": 398,
+          "image": "https://mosaic.scdn.co/640/ab67616d00001e0219b148f705b4975d7bcc489eab67616d00001e027a94c393899fc359c25795afab67616d00001e02a29f8977d3f13760d01332e0ab67616d00001e02c9750cf7a3824ab5499302f9",
+          "mood_match": "energetic"
+        }
+      ],
+      "created_at": "Just now"
+    },
+    {
+      "id": "pl_1794207149_f0411c",
+      "user_id": "user_1794133687_c66785",
+      "name": "spiritual rap",
+      "description": "Created from player",
       "mood": "energetic",
       "cover": null,
       "songs": [
         {
-          "id": "test_song_1",
-          "name": "Blue Eyes",
-          "artist": "Yo Yo Honey Singh",
+          "id": "yt_PphmrFkvyM0",
+          "name": "Sanjeevani Boonti || Ramayan Rap Song || Hindi Rap Song || 2026",
+          "artist": "Sankatmochan Hanuman- Raanjha",
           "lastfm_url": null,
-          "youtube_id": null,
-          "preview_url": null,
+          "youtube_id": "PphmrFkvyM0",
+          "preview_url": "https://www.youtube.com/watch?v=PphmrFkvyM0",
           "album": null,
           "duration_ms": null,
           "listeners": null,
@@ -22,44 +188,69 @@
           "tags": [],
           "audio_features": {},
           "ai_explanation": null,
-          "mood_match": null
-        }
-      ],
-      "is_public": false,
-      "created_at": "2026-11-08T05:43:17.594810",
-      "updated_at": "2026-11-08T05:43:17.594810"
-    }
-  ],
-  "6aed31baea2b9a614f7df915": [
-    {
-      "user_id": "6aed31baea2b9a614f7df915",
-      "name": "spiritual",
-      "description": "",
-      "mood": "energetic",
-      "cover": "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=600&q=80",
-      "songs": [],
-      "is_public": false,
-      "created_at": "2026-11-08T04:16:19.164024",
-      "updated_at": "2026-11-08T04:32:58.538301",
-      "id": "6aeff793d4e2483496750fec"
-    }
-  ],
-  "user_1794133687_c66785": [
-    {
-      "id": "pl_1794135580_173914",
-      "user_id": "user_1794133687_c66785",
-      "name": "rap",
-      "description": "Created from player",
-      "mood": "energetic",
-      "cover": null,
-      "songs": [
+          "mood_match": "energetic"
+        },
         {
-          "id": "yt_0-LsaHNR6No",
-          "name": "Not Like You | ()",
-          "artist": "Hammy Muzic",
+          "name": "Raanjha || Shoorveer Arjun Rap Song || Mahabharat Rap Song || 2024",
+          "artist": "Arjun",
+          "duration": 268,
+          "id": "song_1794212045322"
+        },
+        {
+          "id": "yt_eryV8GvERnk",
+          "name": "Raanjha || Shoorveer Abhimanyu Rap Song || Mahabharat Rap Song || 2024",
+          "artist": "Abhimanyu",
           "lastfm_url": null,
-          "youtube_id": "0-LsaHNR6No",
-          "preview_url": "https://www.youtube.com/watch?v=0-LsaHNR6No",
+          "youtube_id": "eryV8GvERnk",
+          "preview_url": "https://www.youtube.com/watch?v=eryV8GvERnk",
+          "album": null,
+          "duration_ms": null,
+          "listeners": null,
+          "playcount": null,
+          "tags": [],
+          "audio_features": {},
+          "ai_explanation": null,
+          "mood_match": "energetic"
+        },
+        {
+          "id": "yt_DVRvyHBZbQI",
+          "name": "Wahi Arjun Hu Mai",
+          "artist": "Ravan - Topic",
+          "lastfm_url": null,
+          "youtube_id": "DVRvyHBZbQI",
+          "preview_url": "https://www.youtube.com/watch?v=DVRvyHBZbQI",
+          "album": null,
+          "duration_ms": null,
+          "listeners": null,
+          "playcount": null,
+          "tags": [],
+          "audio_features": {},
+          "ai_explanation": null,
+          "mood_match": "energetic"
+        },
+        {
+          "id": "yt_tPD9RmdCTak",
+          "name": "Angad Ravan Samvad || Ramayan Rap Song || Hindi Rap Song || 2025",
+          "artist": "Angad- Raanjha",
+          "lastfm_url": null,
+          "youtube_id": "tPD9RmdCTak",
+          "preview_url": "https://www.youtube.com/watch?v=tPD9RmdCTak",
+          "album": null,
+          "duration_ms": null,
+          "listeners": null,
+          "playcount": null,
+          "tags": [],
+          "audio_features": {},
+          "ai_explanation": null,
+          "mood_match": "energetic"
+        },
+        {
+          "id": "yt_1GgL3jQrR6E",
+          "name": "Raanjha || Ramayan Rap Song || Motivational &amp; Energetic Rap Song || 2025",
+          "artist": "Lakshman Parshuram",
+          "lastfm_url": null,
+          "youtube_id": "1GgL3jQrR6E",
+          "preview_url": "https://www.youtube.com/watch?v=1GgL3jQrR6E",
           "album": null,
           "duration_ms": null,
           "listeners": null,
@@ -71,8 +262,94 @@
         }
       ],
       "is_public": false,
-      "created_at": "2026-11-08T16:29:40.686076",
-      "updated_at": "2026-11-08T16:29:40.686076"
+      "created_at": "2026-11-09T12:22:29.630278",
+      "updated_at": "2026-11-09T13:59:48.864284"
+    }
+  ],
+  "guest": [
+    {
+      "id": "imported-57a5713f",
+      "name": "My Spotify Chill Mix",
+      "mood": "happy",
+      "description": "Imported from Spotify • 8 tracks ready to stream",
+      "user_id": "guest",
+      "is_public": true,
+      "source": "spotify",
+      "songs": [
+        {
+          "name": "Kesariya",
+          "artist": "Arijit Singh",
+          "youtube_id": "BddP6PYo2gs",
+          "duration": 268,
+          "mood_match": "romantic",
+          "id": "imp-spot-0-BddP6PYo2gs",
+          "image": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=300&auto=format&fit=crop&q=80"
+        },
+        {
+          "name": "Not Like You",
+          "artist": "Hammy Muzic",
+          "youtube_id": "0-hF_wZ47wQ",
+          "duration": 225,
+          "mood_match": "energetic",
+          "id": "imp-spot-1-0-hF_wZ47wQ",
+          "image": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=300&auto=format&fit=crop&q=80"
+        },
+        {
+          "name": "Raataan Lambiyan",
+          "artist": "Jubin Nautiyal",
+          "youtube_id": "gvyUuxdRdR4",
+          "duration": 230,
+          "mood_match": "calm",
+          "id": "imp-spot-2-gvyUuxdRdR4",
+          "image": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=300&auto=format&fit=crop&q=80"
+        },
+        {
+          "name": "Believer",
+          "artist": "Imagine Dragons",
+          "youtube_id": "7wtfhZwyrcc",
+          "duration": 204,
+          "mood_match": "energetic",
+          "id": "imp-spot-3-7wtfhZwyrcc",
+          "image": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=300&auto=format&fit=crop&q=80"
+        },
+        {
+          "name": "Desi Kalakaar",
+          "artist": "Yo Yo Honey Singh",
+          "youtube_id": "KhnVcACNWbQ",
+          "duration": 258,
+          "mood_match": "energetic",
+          "id": "imp-spot-4-KhnVcACNWbQ",
+          "image": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=300&auto=format&fit=crop&q=80"
+        },
+        {
+          "name": "Ilahi",
+          "artist": "Arijit Singh",
+          "youtube_id": "fdubeMFwuGs",
+          "duration": 229,
+          "mood_match": "happy",
+          "id": "imp-spot-5-fdubeMFwuGs",
+          "image": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=300&auto=format&fit=crop&q=80"
+        },
+        {
+          "name": "Channa Mereya",
+          "artist": "Arijit Singh",
+          "youtube_id": "284Ov7ysmfA",
+          "duration": 289,
+          "mood_match": "sad",
+          "id": "imp-spot-6-284Ov7ysmfA",
+          "image": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=300&auto=format&fit=crop&q=80"
+        },
+        {
+          "name": "Midnight City",
+          "artist": "M83",
+          "youtube_id": "dX3k_QDnzHE",
+          "duration": 243,
+          "mood_match": "focus",
+          "id": "imp-spot-7-dX3k_QDnzHE",
+          "image": "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=300&auto=format&fit=crop&q=80"
+        }
+      ],
+      "created_at": "Just now"
     }
   ]
 }

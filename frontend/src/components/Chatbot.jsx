@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { playSong, setQueue } from '../store/audioSlice';
+import { playSong, setQueue, closeChatbot } from '../store/audioSlice';
 import { getUserPlaylistSongs } from '../utils/userStorage';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
@@ -373,7 +373,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
             ...prev.filter((msg) => msg.role !== 'system'),
             {
               role: 'system',
-              content: '🎤 Listening... Speak now (Hindi or English)',
+              content: '\uD83C\uDFA4 Listening... Speak now (Hindi or English)',
               songs: [],
               playCommand: null,
               playlistName: null,
@@ -413,7 +413,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
               ...prev,
               {
                 role: 'user',
-                content: `🎤 ${finalQuery}`,
+                content: `\uD83C\uDFA4 ${finalQuery}`,
                 songs: [],
                 playCommand: null,
                 playlistName: null,
@@ -479,7 +479,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
         ...prev.filter((msg) => msg.role !== 'system'),
         {
           role: 'system',
-          content: '🎤 Listening... Speak now (supports English & Hindi)',
+          content: '\uD83C\uDFA4 Listening... Speak now (supports English & Hindi)',
           songs: [],
           playCommand: null,
           playlistName: null,
@@ -531,7 +531,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
         ...prev,
         {
           role: 'user',
-          content: `🎤 ${transcript}${languageInfo}`,
+          content: `\uD83C\uDFA4 ${transcript}${languageInfo}`,
           songs: [],
           playCommand: null,
           playlistName: null,
@@ -816,6 +816,80 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
     }
   };
 
+  const handleSendMessageRef = useRef(handleSendMessage);
+  handleSendMessageRef.current = handleSendMessage;
+
+  // Real-time integration with Hands-Free 'Hey Abhi' voice engine
+  useEffect(() => {
+    // 1. Listen for voice playback / control events
+    const handleVoiceCommandEvent = (e) => {
+      const { userText, replyText, song } = e.detail || {};
+      if (!userText) return;
+
+      setMessages((prev) => [
+        ...prev.filter((m) => m.role !== 'system'),
+        {
+          role: 'user',
+          content: '\uD83C\uDFA4 ' + userText,
+          songs: [],
+          playCommand: null,
+          playlistName: null,
+        },
+        {
+          role: 'assistant',
+          content: replyText || 'Command executed.',
+          songs: song ? [song] : [],
+          playCommand: null,
+          playlistName: null,
+        },
+      ]);
+    };
+
+    // 2. Listen for conversational AI queries (e.g. 'who are you', 'recommend a song')
+    const handleAuraChatQueryEvent = (e) => {
+      const { query } = e.detail || {};
+      if (!query) return;
+
+      setMessages((prev) => [
+        ...prev.filter((m) => m.role !== 'system'),
+        {
+          role: 'user',
+          content: '\uD83C\uDFA4 ' + query,
+          songs: [],
+          playCommand: null,
+          playlistName: null,
+        },
+      ]);
+      if (handleSendMessageRef.current) {
+        handleSendMessageRef.current(query);
+      }
+    };
+
+    // 3. Listen for wake word detection ('Hey Abhi')
+    const handleWakeDetectedEvent = () => {
+      setMessages((prev) => [
+        ...prev.filter((m) => m.role !== 'system'),
+        {
+          role: 'system',
+          content: '🎙️ Hey Abhi active • Listening for your command or question...',
+          songs: [],
+          playCommand: null,
+          playlistName: null,
+        },
+      ]);
+    };
+
+    window.addEventListener('moodtunes:voice-command', handleVoiceCommandEvent);
+    window.addEventListener('moodtunes:aura-chat-query', handleAuraChatQueryEvent);
+    window.addEventListener('moodtunes:wake-detected', handleWakeDetectedEvent);
+
+    return () => {
+      window.removeEventListener('moodtunes:voice-command', handleVoiceCommandEvent);
+      window.removeEventListener('moodtunes:aura-chat-query', handleAuraChatQueryEvent);
+      window.removeEventListener('moodtunes:wake-detected', handleWakeDetectedEvent);
+    };
+  }, []);
+
   const handleSend = async () => {
     if (!input.trim()) return;
     
@@ -984,7 +1058,10 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
                 🗑️
               </button>
               <button
-                onClick={onToggle}
+                onClick={() => {
+                  if (onToggle) onToggle();
+                  dispatch(closeChatbot());
+                }}
                 className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-all text-xs cursor-pointer"
                 title="Close Assistant"
               >

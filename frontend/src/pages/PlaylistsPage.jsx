@@ -6,8 +6,10 @@ import { API_BASE_URL } from '../config/api';
 import { logout } from '../store/authSlice';
 import { playSong, setQueue, setPlaying, setActiveMood, addToPlayNext, addToQueue, moveQueueItem, openQueue, shuffleUpcomingQueue } from '../store/audioSlice';
 import CreatePlaylistModal from '../components/CreatePlaylistModal';
+import ImportPlaylistModal from '../components/ImportPlaylistModal';
 import { getUserPlaylistSongs, saveUserPlaylistSongs, getUserCustomPlaylists, saveUserCustomPlaylists } from '../utils/userStorage';
 import { resolveTrackArtwork, handleArtworkError } from '../utils/imageHelper';
+import { cleanSongTitle } from '../utils/textHelper';
 
 // ============================================================================
 // MOOD THEMES & DYNAMIC COLOR GRADING CONFIG
@@ -213,11 +215,17 @@ const PlaylistsPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPlaylistId, setSelectedPlaylistId] = useState('starter-calm-and-relax');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAddSongModalOpen, setIsAddSongModalOpen] = useState(false);
   const [addSongSearch, setAddSongSearch] = useState('');
   const [remoteSearchResults, setRemoteSearchResults] = useState([]);
   const [isSearchingRemote, setIsSearchingRemote] = useState(false);
   const [mobileDetailView, setMobileDetailView] = useState(false);
+
+  // External imported playlist limit check (1 external playlist allowed)
+  const hasImportedPlaylist = useMemo(() => {
+    return (userPlaylists || []).some((p) => p.source === 'spotify' || p.source === 'youtube' || String(p.id || '').startsWith('imported-'));
+  }, [userPlaylists]);
   const [localSongsMap, setLocalSongsMap] = useState({});
   const [toastMsg, setToastMsg] = useState(null);
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -798,9 +806,30 @@ const PlaylistsPage = () => {
               </p>
             </div>
 
-            {/* Create Playlist Button (Clean, no duplicate ++ symbol) */}
-            <button
-              onClick={() => setIsCreateModalOpen(true)}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {/* 1-Click Import Playlist Button (Restricted to 1 imported playlist) */}
+              {!hasImportedPlaylist ? (
+                <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold bg-white/10 hover:bg-white/15 text-white border border-white/15 transition-all duration-300 shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+                  title="Import public Spotify or YouTube playlist"
+                >
+                  <span>📥</span>
+                  <span>Import Playlist</span>
+                </button>
+              ) : (
+                <div
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 select-none shadow-sm"
+                  title="You already have 1 imported playlist. Remove it from your library if you want to import another."
+                >
+                  <span>✓</span>
+                  <span>Playlist Imported (1/1)</span>
+                </div>
+              )}
+
+              {/* Create Playlist Button */}
+              <button
+                onClick={() => setIsCreateModalOpen(true)}
               className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-300 shadow-lg hover:scale-105 active:scale-95 cursor-pointer self-start sm:self-auto"
               style={{
                 backgroundColor: moodTheme.accent,
@@ -812,7 +841,8 @@ const PlaylistsPage = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
               </svg>
               <span>Create Playlist</span>
-            </button>
+              </button>
+            </div>
           </div>
 
           {/* Horizontal Mood Filter Pills: Dynamically changes ENTIRE APP color grading */}
@@ -1180,13 +1210,13 @@ const PlaylistsPage = () => {
             {/* Tracklist Table */}
             <div className="bg-slate-950/60 backdrop-blur-xl rounded-3xl border border-white/10 overflow-hidden shadow-xl">
               
-              {/* Table Column Headers (12 Columns: 1 + 4 + 2 + 1 + 4 = 12 desktop, 1 + 4 + 3 + 0 + 4 = 12 tablet) */}
+              {/* Table Column Headers (12 Columns: 1 Drag + 3 Title + 2 Artist + 1 Time + 5 Actions) */}
               <div className="grid grid-cols-12 px-4 sm:px-5 py-3 text-xs font-mono uppercase tracking-wider text-slate-400 border-b border-white/5 bg-slate-900/40 items-center">
                 <div className="col-span-1 text-center"># / Drag</div>
-                <div className="col-span-5 sm:col-span-4 md:col-span-4">Title</div>
-                <div className="col-span-3 sm:col-span-3 md:col-span-2">Artist</div>
-                <div className="col-span-1 hidden md:block text-center">Time</div>
-                <div className="col-span-3 sm:col-span-4 md:col-span-4 text-right pr-2">Queue & Actions</div>
+                <div className="col-span-5 sm:col-span-4 md:col-span-3">Title</div>
+                <div className="hidden sm:block sm:col-span-2 md:col-span-2">Artist</div>
+                <div className="hidden sm:block sm:col-span-1 md:col-span-1 text-center">Time</div>
+                <div className="col-span-6 sm:col-span-4 md:col-span-5 text-right pr-2">Queue & Actions</div>
               </div>
 
               {/* Empty Playlist State (User will add songs themselves!) */}
@@ -1273,7 +1303,7 @@ const PlaylistsPage = () => {
                         {/* Column 2: Artwork & Title */}
                         <div
                           onClick={() => handlePlayTrack(track, idx)}
-                          className="col-span-5 sm:col-span-4 md:col-span-4 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2 cursor-pointer"
+                          className="col-span-5 sm:col-span-4 md:col-span-3 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2 cursor-pointer"
                         >
                           <img
                             src={resolveTrackArtwork(track)}
@@ -1285,7 +1315,7 @@ const PlaylistsPage = () => {
                             <p className={`text-xs sm:text-sm font-semibold truncate ${
                               isTrackPlaying ? 'text-cyan font-bold' : 'text-slate-200 group-hover:text-white'
                             }`}>
-                              {track.name}
+                              {cleanSongTitle(track.name)}
                             </p>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               {isTrackPlaying && (
@@ -1305,24 +1335,24 @@ const PlaylistsPage = () => {
                         {/* Column 3: Artist */}
                         <div
                           onClick={() => handlePlayTrack(track, idx)}
-                          className="col-span-3 sm:col-span-3 md:col-span-2 min-w-0 cursor-pointer"
+                          className="hidden sm:block sm:col-span-2 md:col-span-2 min-w-0 cursor-pointer pr-2"
                         >
                           <p className="text-xs text-slate-400 group-hover:text-slate-300 truncate">
                             {track.artist}
                           </p>
                         </div>
 
-                        {/* Column 4: Duration */}
-                        <div className="col-span-1 hidden md:block text-center font-mono text-xs text-slate-400">
+                        {/* Column 4: Duration (Clean, isolated, never overlapped) */}
+                        <div className="hidden sm:block sm:col-span-1 md:col-span-1 text-center font-mono text-xs text-slate-400 select-none pr-1">
                           {formatSongDuration(track.duration)}
                         </div>
 
-                        {/* Column 5: Queue Adjustments & Actions (Spacious, Aligned, Never Cramped) */}
-                        <div className="col-span-3 sm:col-span-4 md:col-span-4 flex items-center justify-end gap-1.5 sm:gap-2 text-right flex-shrink-0">
+                        {/* Column 5: Queue Adjustments & Actions (Dedicated wide area with zero overflow into Time) */}
+                        <div className="col-span-6 sm:col-span-4 md:col-span-5 flex items-center justify-end gap-1.5 sm:gap-2 text-right">
                           {/* Play Next in Queue Button */}
                           <button
                             onClick={(e) => handlePlayNextInQueue(track, e)}
-                            className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] sm:text-xs font-mono font-bold transition-all hover:scale-105 whitespace-nowrap cursor-pointer shadow-sm"
+                            className="px-2 sm:px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] sm:text-xs font-mono font-bold transition-all hover:scale-105 whitespace-nowrap cursor-pointer shadow-sm shrink-0"
                             title="Make this song play next in queue"
                           >
                             ⚡ Next
@@ -1331,14 +1361,14 @@ const PlaylistsPage = () => {
                           {/* Add to Queue Button */}
                           <button
                             onClick={(e) => handleAddToUpcomingQueue(track, e)}
-                            className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-[10px] sm:text-xs font-mono font-bold transition-all hover:scale-105 whitespace-nowrap cursor-pointer hidden sm:inline-flex"
+                            className="px-2 sm:px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-[10px] sm:text-xs font-mono font-bold transition-all hover:scale-105 whitespace-nowrap cursor-pointer hidden md:inline-flex shrink-0"
                             title="Add to upcoming queue"
                           >
                             + Queue
                           </button>
 
                           {/* Move Up / Down Quick Buttons */}
-                          <div className="hidden lg:flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                          <div className="hidden xl:flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity shrink-0">
                             <button
                               onClick={(e) => handleMoveSong(idx, 'up', e)}
                               disabled={idx === 0}
@@ -1357,24 +1387,13 @@ const PlaylistsPage = () => {
                             </button>
                           </div>
 
-                          {/* Play Button */}
-                          <button
-                            onClick={() => handlePlayTrack(track, idx)}
-                            className="w-8 h-8 rounded-lg bg-red-600/80 hover:bg-red-600 flex items-center justify-center text-white shrink-0 shadow transition-transform group-hover:scale-105 cursor-pointer"
-                            title="Play Track"
-                          >
-                            <svg className="w-3.5 h-3.5 translate-x-0.2" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
-                          </button>
-
                           {/* Remove Song Button */}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleRemoveTrackFromPlaylist(track.id);
                             }}
-                            className="w-8 h-8 rounded-lg bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 flex items-center justify-center text-xs transition cursor-pointer"
+                            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 flex items-center justify-center text-xs transition cursor-pointer shrink-0"
                             title="Remove from playlist"
                           >
                             ✕
@@ -1473,7 +1492,7 @@ const PlaylistsPage = () => {
                         onError={(e) => handleArtworkError(e, song)}
                       />
                       <div className="min-w-0">
-                        <p className="text-xs sm:text-sm font-semibold text-white truncate">{song.name}</p>
+                        <p className="text-xs sm:text-sm font-semibold text-white truncate">{cleanSongTitle(song.name)}</p>
                         <p className="text-[11px] text-slate-400 truncate">{song.artist}</p>
                       </div>
                     </div>
@@ -1512,6 +1531,18 @@ const PlaylistsPage = () => {
           </div>
         </div>
       )}
+
+      {/* 1-Click Spotify / YouTube Playlist Importer Modal */}
+      <ImportPlaylistModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        hasImportedPlaylist={hasImportedPlaylist}
+        onImportSuccess={(newPl) => {
+          fetchPlaylists();
+          setSelectedPlaylistId(newPl.id);
+          showToast(`🎉 Imported "${newPl.name}"!`);
+        }}
+      />
 
     </div>
   );

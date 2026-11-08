@@ -25,8 +25,20 @@ def _load_local_playlists() -> dict:
         return {}
     try:
         with open(LOCAL_PLAYLISTS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
+            raw = json.load(f)
+            if isinstance(raw, dict):
+                return raw
+            elif isinstance(raw, list):
+                # Seamlessly normalize list of playlists into dict keyed by user_id
+                normalized = {}
+                for item in raw:
+                    if isinstance(item, dict):
+                        uid = item.get("user_id") or "default"
+                        normalized.setdefault(uid, []).append(item)
+                return normalized
+            return {}
+    except Exception as e:
+        print(f"Error loading local playlists: {e}")
         return {}
 
 def _save_local_playlists(data: dict):

@@ -25,6 +25,8 @@ import {
   setTurntableOpen,
   setSleepTimerModalOpen,
   setShortcutsModalOpen,
+  openChatbot,
+  closeChatbot,
 } from '../store/audioSlice';
 import { getUserPlaylistSongs, getUserCustomPlaylists, getUserHistory } from './userStorage';
 import { resolveKnownYouTubeId, FAMOUS_SONGS_YOUTUBE } from './songMap';
@@ -382,6 +384,20 @@ export const parseVoiceCommand = (rawTranscript) => {
   }
 
   // 2. Navigation Commands (Open Playlist, Queue, Turntable, Recommendations, History, Home)
+  // Navigation: Roadmap
+  if (
+    /^(?:open|show|go\s+to|view|display|navigate\s+to)\s+(?:the\s+)?(?:mood\s+)?roadmap$/i.test(clean) ||
+    /^(?:roadmap|mood\s+roadmap|elevation\s+roadmap)$/i.test(clean)
+  ) {
+    return {
+      type: 'NAVIGATE_PAGE',
+      path: '/roadmap',
+      title: 'Mood Roadmap',
+      feedback: 'Opening mood elevation roadmap.',
+      displayText: '🚀 Roadmap Opened',
+    };
+  }
+
   if (
     /^(?:open|show|go\s+to|view|display|navigate\s+to)\s+(?:my\s+|the\s+)?playlists?$/i.test(clean) ||
     /^(?:my\s+)?playlists?$/i.test(clean) ||
@@ -513,7 +529,22 @@ export const parseVoiceCommand = (rawTranscript) => {
     return { type: 'OPEN_SLEEP_TIMER' };
   }
 
-  // 5. Close / Dismiss Modal
+  // 5. Open / Close Voice Assistant (Aura AI)
+  if (
+    /^(?:open|show|launch|start|activate|talk\s+to|chat\s+with)\s+(?:the\s+)?(?:voice\s+)?(?:assistant|chatbot|aura|copilot|abhi)$/i.test(clean) ||
+    /^(?:voice\s+)?(?:assistant|chatbot|aura\s+ai|copilot)$/i.test(clean)
+  ) {
+    return { type: 'OPEN_ASSISTANT' };
+  }
+
+  if (
+    /^(?:close|hide|dismiss|exit|shut\s+down)\s+(?:the\s+)?(?:voice\s+)?(?:assistant|chatbot|aura|copilot)$/i.test(clean) ||
+    /^(?:bye|goodbye|stop\s+listening|exit)\s*(?:abhi|assistant|aura)?$/i.test(clean)
+  ) {
+    return { type: 'CLOSE_ASSISTANT' };
+  }
+
+  // 6. Close / Dismiss Modal
   if (/^(?:close|dismiss|cancel|hide)\s*(?:modal|dialog|window|drawer|popup)?$/i.test(clean)) {
     return { type: 'CLOSE_MODAL' };
   }
@@ -573,6 +604,22 @@ export const parseVoiceCommand = (rawTranscript) => {
     };
   }
 
+  // 10. Conversational AI Queries (Natural Questions to Abhi / Aura)
+  const isQuestionOrChat =
+    /^(?:what|who|why|when|where|how|can you|could you|would you|tell me|explain|suggest|recommend|talk|help)\b/i.test(clean) ||
+    /\?$/.test(clean) ||
+    /^(?:hello|hi|hey|good\s+morning|good\s+evening|good\s+afternoon|how\s+are\s+you|what's\s+up|whats\s+up)\b/i.test(clean);
+
+  if (
+    isQuestionOrChat &&
+    !/^(?:play|start|pause|resume|skip|next|previous|stop|volume|mute|unmute|shuffle)\b/i.test(clean)
+  ) {
+    return {
+      type: 'AURA_CHAT_QUERY',
+      query: clean,
+    };
+  }
+
   // Fallback: If user just spoke a song title like "Not Like You", "Kesariya", "Believer"
   if (clean.length > 2) {
     return {
@@ -593,8 +640,8 @@ export const executeVoiceAction = async (command, dispatch, audioState, allPlayl
 
   switch (command.type) {
     case 'WAKE_ONLY': {
+      dispatch(openChatbot());
       playVoiceChime('wake');
-      speakVoiceFeedback('Voice assistant is active.');
       dispatch(
         setVoiceDJFeedback({
           text: '🎙️ Voice assistant active • Speak your command',
@@ -602,6 +649,53 @@ export const executeVoiceAction = async (command, dispatch, audioState, allPlayl
           status: 'listening',
         })
       );
+      try {
+        window.dispatchEvent(new CustomEvent('moodtunes:wake-detected'));
+      } catch (e) {}
+      break;
+    }
+
+    case 'OPEN_ASSISTANT': {
+      dispatch(openChatbot());
+      playVoiceChime('wake');
+      dispatch(
+        setVoiceDJFeedback({
+          text: '🎙️ Voice Assistant Active',
+          type: 'control',
+          status: 'listening',
+        })
+      );
+      try {
+        window.dispatchEvent(new CustomEvent('moodtunes:wake-detected'));
+      } catch (e) {}
+      break;
+    }
+
+    case 'CLOSE_ASSISTANT': {
+      dispatch(closeChatbot());
+      playVoiceChime('success');
+      speakVoiceFeedback('Assistant closed.');
+      dispatch(setVoiceDJFeedback({ text: 'Assistant closed', type: 'control' }));
+      break;
+    }
+
+    case 'AURA_CHAT_QUERY': {
+      dispatch(openChatbot());
+      playVoiceChime('success');
+      dispatch(
+        setVoiceDJFeedback({
+          text: `💬 Aura AI: "${command.query}"`,
+          type: 'control',
+          status: 'processing',
+        })
+      );
+      try {
+        window.dispatchEvent(
+          new CustomEvent('moodtunes:aura-chat-query', {
+            detail: { query: command.query },
+          })
+        );
+      } catch (e) {}
       break;
     }
 
