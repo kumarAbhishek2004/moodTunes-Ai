@@ -4,6 +4,7 @@ Ensures user authentication accounts and passwords persist forever across restar
 """
 import os
 import json
+import uuid
 import threading
 from typing import Optional
 from datetime import datetime
@@ -29,13 +30,18 @@ def _load_local_users() -> dict:
 
 def _save_local_users(data: dict):
     os.makedirs(DATA_DIR, exist_ok=True)
+    tmp_file = f"{LOCAL_USERS_FILE}.{os.getpid()}_{uuid.uuid4().hex}.tmp"
     try:
-        tmp_file = LOCAL_USERS_FILE + ".tmp"
         with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         os.replace(tmp_file, LOCAL_USERS_FILE)
     except Exception as e:
         print(f"Error saving local users: {e}")
+        if os.path.exists(tmp_file):
+            try:
+                os.remove(tmp_file)
+            except Exception:
+                pass
 
 class UserService:
     """Service for user operations with guaranteed persistence"""

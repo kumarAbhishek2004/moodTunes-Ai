@@ -486,14 +486,14 @@ const AddToPlaylistButton = ({ song, compact = false }) => {
       {showGuestNotice && (
         <>
           <div
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm"
             onClick={(e) => {
               e.stopPropagation();
               setShowGuestNotice(false);
             }}
           />
           <div
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-80 sm:w-96 p-6 rounded-3xl bg-slate-950/95 border border-white/20 shadow-2xl backdrop-blur-2xl text-center"
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] w-80 sm:w-96 p-6 rounded-3xl bg-slate-950/95 border border-white/20 shadow-2xl backdrop-blur-2xl text-center"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-14 h-14 mx-auto rounded-2xl bg-pink-500/15 border border-pink-500/30 flex items-center justify-center text-2xl mb-4">

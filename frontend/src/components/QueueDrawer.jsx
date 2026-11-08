@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import {
   toggleQueue,
+  closeQueue,
   playSongAtIndex,
   removeFromQueue,
   clearUpcomingQueue,
@@ -202,10 +203,23 @@ const QueueDrawer = () => {
               </button>
             )}
 
+            {/* Minimize / Collapse Queue to Bottom Player */}
             <button
-              onClick={() => dispatch(toggleQueue())}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors ml-1 cursor-pointer"
+              onClick={() => dispatch(closeQueue())}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Minimize Queue to Bottom Bar"
+              aria-label="Minimize queue to bottom bar"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            <button
+              onClick={() => dispatch(closeQueue())}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors ml-0.5 cursor-pointer"
               aria-label="Close queue"
+              title="Close queue"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -460,11 +474,19 @@ const QueueDrawer = () => {
         </div>
 
         {/* 3. FOOTER */}
-        <div className="p-3 border-t border-white/10 bg-obsidian-950/80 text-center">
-          <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+        <div className="p-3 border-t border-white/10 bg-obsidian-950/80 flex items-center justify-between gap-2">
+          <p className="text-[11px] text-slate-400 flex items-center gap-1.5 truncate">
             <span>⠿</span>
-            <span>Grab <strong>:::</strong> to drag and reorder, or click <strong>⚡</strong> to play next</span>
+            <span>Grab <strong>:::</strong> to reorder</span>
           </p>
+          <button
+            onClick={() => dispatch(closeQueue())}
+            className="flex-shrink-0 px-3 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Minimize to bottom player dock"
+          >
+            <span>⬇</span>
+            <span>Minimize to Bar</span>
+          </button>
         </div>
       </aside>
     </>

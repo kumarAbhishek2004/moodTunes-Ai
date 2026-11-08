@@ -499,7 +499,7 @@ const BottomPlayer = () => {
             <span className="text-sm">🌙</span>
             {sleepTimer?.active && (
               <span className="text-[10px] font-mono font-bold text-indigo-300 hidden sm:inline">
-                {sleepTimer.isEndOfTrack ? 'Track' : `${Math.ceil(sleepTimer.remainingSeconds / 60)}m`}
+                {sleepTimer?.isEndOfTrack ? 'Track' : `${Math.ceil((sleepTimer?.remainingSeconds ?? 0) / 60)}m`}
               </span>
             )}
           </button>

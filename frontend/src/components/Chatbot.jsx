@@ -136,6 +136,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const speechRecogRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -351,58 +352,151 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
   };
 
   const startRecording = async () => {
+    // 1. Primary: Instant In-Browser Speech Recognition (Zero-Latency, Hindi & English)
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      try {
+        if (speechRecogRef.current) {
+          try {
+            speechRecogRef.current.abort();
+          } catch (e) {}
+        }
+
+        const recog = new SpeechRecognition();
+        recog.lang = selectedLanguage === 'hi' ? 'hi-IN' : 'en-IN';
+        recog.continuous = false;
+        recog.interimResults = true;
+
+        recog.onstart = () => {
+          setIsRecording(true);
+          setMessages((prev) => [
+            ...prev.filter((msg) => msg.role !== 'system'),
+            {
+              role: 'system',
+              content: '🎤 Listening... Speak now (Hindi or English)',
+              songs: [],
+              playCommand: null,
+              playlistName: null,
+            },
+          ]);
+        };
+
+        let transcriptBuffer = '';
+
+        recog.onresult = (event) => {
+          let text = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            text += event.results[i][0].transcript + ' ';
+          }
+          text = text.trim();
+          if (text) {
+            transcriptBuffer = text;
+            setInput(text);
+          }
+        };
+
+        recog.onerror = (err) => {
+          console.warn('Chatbot speech recognition status:', err);
+          setIsRecording(false);
+          setMessages((prev) => prev.filter((msg) => msg.role !== 'system'));
+          if (err.error !== 'aborted' && err.error !== 'no-speech') {
+            startMediaRecorderFallback();
+          }
+        };
+
+        recog.onend = () => {
+          setIsRecording(false);
+          setMessages((prev) => prev.filter((msg) => msg.role !== 'system'));
+          if (transcriptBuffer && transcriptBuffer.trim().length > 1) {
+            const finalQuery = transcriptBuffer.trim();
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: 'user',
+                content: `🎤 ${finalQuery}`,
+                songs: [],
+                playCommand: null,
+                playlistName: null,
+              },
+            ]);
+            setTimeout(() => handleSendMessage(finalQuery), 350);
+          }
+        };
+
+        speechRecogRef.current = recog;
+        recog.start();
+        return;
+      } catch (err) {
+        console.warn('SpeechRecognition failed, falling back to MediaRecorder:', err);
+      }
+    }
+
+    // 2. Fallback: MediaRecorder audio upload to backend
+    startMediaRecorderFallback();
+  };
+
+  const startMediaRecorderFallback = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
-      
+
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
-      
+
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
-      
+
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-        
-        // Check if audio has sufficient data
+
         if (audioBlob.size < 1000) {
-          setMessages(prev => prev.filter(msg => msg.role !== 'system'));
-          setMessages(prev => [...prev, {
-            role: 'assistant',
-            content: '⚠️ Recording too short. Please speak for at least 1 second.',
-            songs: [],
-            playCommand: null,
-            playlistName: null
-          }]);
+          setMessages((prev) => prev.filter((msg) => msg.role !== 'system'));
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: '⚠️ Recording too short. Please speak for at least 1 second.',
+              songs: [],
+              playCommand: null,
+              playlistName: null,
+            },
+          ]);
         } else {
           await transcribeAudio(audioBlob);
         }
-        
-        stream.getTracks().forEach(track => track.stop());
+
+        stream.getTracks().forEach((track) => track.stop());
       };
-      
+
       mediaRecorder.start();
       setIsRecording(true);
-      
-      setMessages(prev => [...prev, {
-        role: 'system',
-        content: '🎤 Listening... Speak now (supports English & Hindi)',
-        songs: [],
-        playCommand: null,
-        playlistName: null
-      }]);
-      
+
+      setMessages((prev) => [
+        ...prev.filter((msg) => msg.role !== 'system'),
+        {
+          role: 'system',
+          content: '🎤 Listening... Speak now (supports English & Hindi)',
+          songs: [],
+          playCommand: null,
+          playlistName: null,
+        },
+      ]);
     } catch (error) {
       console.error('Microphone error:', error);
-      alert('Could not access microphone. Please grant permission.');
+      alert('Could not access microphone. Please grant permission in your browser.');
     }
   };
 
   const stopRecording = () => {
+    if (speechRecogRef.current && isRecording) {
+      try {
+        speechRecogRef.current.stop();
+      } catch (e) {}
+    }
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
@@ -411,68 +505,195 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
 
   const transcribeAudio = async (audioBlob) => {
     setIsTranscribing(true);
-    
+
     try {
       const formData = new FormData();
       formData.append('file', audioBlob, 'recording.webm');
-      
-      // Choose endpoint based on language selection
-      const endpoint = selectedLanguage === 'auto' 
-        ? `${API_BASE_URL}/voice/transcribe-detailed`
-        : `${API_BASE_URL}/voice/transcribe?language=${selectedLanguage}`;
-      
-      const response = await axios.post(
-        endpoint,
-        formData,
-        {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 30000 // 30 second timeout
-        }
-      );
-      
-      const { transcript, detected_language, language_name, confidence } = response.data;
-      
-      setMessages(prev => prev.filter(msg => msg.role !== 'system'));
+
+      const endpoint = `${API_BASE_URL}/voice/transcribe-detailed`;
+
+      const response = await axios.post(endpoint, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 25000,
+      });
+
+      const transcript = response.data?.transcript || response.data?.text || '';
+      if (!transcript || !transcript.trim()) {
+        throw new Error('No speech detected');
+      }
+
+      setMessages((prev) => prev.filter((msg) => msg.role !== 'system'));
       setInput(transcript);
-      
-      // Show language detection info
-      const languageInfo = language_name ? ` (${language_name})` : '';
-      const confidenceInfo = confidence ? ` [${Math.round(confidence * 100)}% confident]` : '';
-      
-      setMessages(prev => [...prev, {
-        role: 'user',
-        content: `🎤 ${transcript}${languageInfo}${confidenceInfo}`,
-        songs: [],
-        playCommand: null,
-        playlistName: null
-      }]);
-      
-      setTimeout(() => handleSendMessage(transcript), 500);
-      
+
+      const languageInfo = response.data?.language_name ? ` (${response.data.language_name})` : '';
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'user',
+          content: `🎤 ${transcript}${languageInfo}`,
+          songs: [],
+          playCommand: null,
+          playlistName: null,
+        },
+      ]);
+
+      setTimeout(() => handleSendMessage(transcript), 400);
     } catch (error) {
       console.error('Transcription error:', error);
-      setMessages(prev => prev.filter(msg => msg.role !== 'system'));
-      
-      let errorMessage = 'Sorry, couldn\'t understand. Please try again.';
-      
+      setMessages((prev) => prev.filter((msg) => msg.role !== 'system'));
+
+      let errorMessage = "Sorry, couldn't understand. Please speak clearly.";
       if (error.response?.data?.detail) {
         errorMessage = error.response.data.detail;
       } else if (error.code === 'ECONNABORTED') {
         errorMessage = 'Transcription timeout. Please try with shorter audio.';
-      } else if (!navigator.onLine) {
-        errorMessage = 'No internet connection. Please check your network.';
       }
-      
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `❌ ${errorMessage}`,
-        songs: [],
-        playCommand: null,
-        playlistName: null
-      }]);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `❌ ${errorMessage}`,
+          songs: [],
+          playCommand: null,
+          playlistName: null,
+        },
+      ]);
     } finally {
       setIsTranscribing(false);
     }
+  };
+
+  // Parses and formats chat content, eliminating raw markdown symbols (**bold**, ##, ---, code blocks)
+  const FormattedChatContent = ({ text, accentColor }) => {
+    if (!text) return null;
+
+    // Clean raw tags if any slipped through
+    const cleanContent = text
+      .replace(/\[PLAY:[^\]]+\]/gi, '')
+      .replace(/\[RECOMMEND:[^\]]+\]/gi, '')
+      .replace(/\[PLAYLIST:[^\]]+\]/gi, '')
+      .trim();
+
+    // Helper to parse inline **bold**, *italic*, `code`
+    const renderInline = (inlineText) => {
+      if (!inlineText) return null;
+      const parts = inlineText.split(/(\**[^*]+?\**|`[^`]+?`|\*[^*]+?\*)/g);
+      return parts.map((part, idx) => {
+        if (!part) return null;
+        if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+          return (
+            <strong key={idx} className="font-semibold text-white">
+              {part.slice(2, -2)}
+            </strong>
+          );
+        }
+        if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
+          return (
+            <code
+              key={idx}
+              className="px-1.5 py-0.5 mx-0.5 rounded-md bg-black/40 border border-white/10 font-mono text-[11px] sm:text-xs text-cyan inline-block"
+            >
+              {part.slice(1, -1)}
+            </code>
+          );
+        }
+        if (part.startsWith('*') && part.endsWith('*') && part.length >= 2) {
+          return (
+            <em key={idx} className="text-slate-300 italic">
+              {part.slice(1, -1)}
+            </em>
+          );
+        }
+        // Strip any stray rogue asterisks or markdown hashes
+        const sanitized = part.replace(/\*\*/g, '').replace(/^#+\s*/g, '');
+        return <span key={idx}>{sanitized}</span>;
+      });
+    };
+
+    const rawLines = cleanContent.split('\n');
+    const elements = [];
+    let inCodeBlock = false;
+    let codeBlockBuffer = [];
+
+    for (let i = 0; i < rawLines.length; i++) {
+      const line = rawLines[i];
+      const trimmed = line.trim();
+
+      // Handle code block fences ```
+      if (trimmed.startsWith('```')) {
+        if (inCodeBlock) {
+          elements.push(
+            <div key={`code-${i}`} className="my-1.5 p-2 rounded-xl bg-black/50 border border-white/10 font-mono text-[11px] sm:text-xs text-cyan overflow-x-auto">
+              {codeBlockBuffer.join('\n')}
+            </div>
+          );
+          codeBlockBuffer = [];
+          inCodeBlock = false;
+        } else {
+          inCodeBlock = true;
+        }
+        continue;
+      }
+
+      if (inCodeBlock) {
+        codeBlockBuffer.push(line);
+        continue;
+      }
+
+      // Skip empty lines or pure dividers
+      if (!trimmed || trimmed === '---' || trimmed === '***') {
+        continue;
+      }
+
+      // Headers (## or ###)
+      if (/^#{1,4}\s+/.test(trimmed)) {
+        const headerText = trimmed.replace(/^#{1,4}\s+/, '');
+        elements.push(
+          <div key={i} className="font-bold text-white text-xs sm:text-sm mt-2 mb-1 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accentColor || '#00F2FE' }} />
+            <span>{renderInline(headerText)}</span>
+          </div>
+        );
+        continue;
+      }
+
+      // Bullet points (- or * or •)
+      if (/^[\-\*•]\s+/.test(trimmed)) {
+        const bulletText = trimmed.replace(/^[\-\*•]\s+/, '');
+        elements.push(
+          <div key={i} className="flex items-start gap-2 my-1 text-xs sm:text-sm text-slate-200 leading-relaxed pl-1">
+            <span className="text-cyan font-bold text-xs mt-0.5 shrink-0">•</span>
+            <span className="flex-1">{renderInline(bulletText)}</span>
+          </div>
+        );
+        continue;
+      }
+
+      // Numbered points (1. or 1️⃣)
+      const numMatch = trimmed.match(/^(\d+[\.\)]|[\u0030-\u0039]️⃣)\s*(.*)/);
+      if (numMatch) {
+        elements.push(
+          <div key={i} className="flex items-start gap-2 my-1.5 text-xs sm:text-sm text-slate-200 leading-relaxed pl-1">
+            <span className="font-mono font-bold text-[10px] px-1.5 py-0.2 rounded bg-white/10 text-cyan shrink-0 mt-0.5">
+              {numMatch[1].replace(/[\.\)]/, '')}
+            </span>
+            <span className="flex-1">{renderInline(numMatch[2])}</span>
+          </div>
+        );
+        continue;
+      }
+
+      // Regular text paragraph
+      elements.push(
+        <p key={i} className="text-xs sm:text-sm text-slate-200 leading-relaxed my-1">
+          {renderInline(trimmed)}
+        </p>
+      );
+    }
+
+    return <div className="space-y-1 text-left">{elements}</div>;
   };
 
   const renderMessage = (message) => {
@@ -481,7 +702,7 @@ const Chatbot = ({ isOpen, onToggle, currentMood, onPlaySong, onPlayPlaylist }) 
     return (
       <div className="space-y-2">
         {content && (
-          <p className="text-sm whitespace-pre-wrap leading-relaxed">{content}</p>
+          <FormattedChatContent text={content} accentColor={moodTheme.accent} />
         )}
         
         {/* Render song buttons */}

@@ -17,8 +17,15 @@ const RecommendationsPage = () => {
   const reduxPlaybackHistory = useSelector((state) => state.audio.playbackHistory) || [];
   const authUser = useSelector((state) => state.auth?.user);
 
-  // Active view tab: 'history' (Default - past 20 played tracks) or 'recommendations'
-  const [activeTab, setActiveTab] = useState('history');
+  // Active view tab: 'recommendations' (AI Stream engine) or 'history' (past 20 played tracks)
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      return searchParams.get('tab') === 'history' ? 'history' : 'recommendations';
+    } catch (e) {
+      return 'recommendations';
+    }
+  });
   const [mood, setMood] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -35,6 +42,11 @@ const RecommendationsPage = () => {
 
   useEffect(() => {
     try {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get('tab') === 'history') {
+        setActiveTab('history');
+      }
+
       const storedMood = localStorage.getItem('selectedMood');
       if (storedMood) {
         setMood(JSON.parse(storedMood));
@@ -43,11 +55,18 @@ const RecommendationsPage = () => {
       }
 
       const cachedRecs = localStorage.getItem('recommendations');
+      let loadedCached = false;
       if (cachedRecs) {
         const parsed = JSON.parse(cachedRecs);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setRecommendations(parsed);
+          loadedCached = true;
         }
+      }
+
+      // Auto-curate stream if recommendations are empty
+      if (!loadedCached) {
+        fetchFreshRecommendations();
       }
     } catch (e) {}
   }, [activeReduxMood]);

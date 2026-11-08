@@ -130,7 +130,7 @@ const CreatePlaylistModal = ({ isOpen, onClose, onCreate, initialSongs = [] }) =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-fadeIn overflow-y-auto">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-fadeIn overflow-y-auto">
       <div
         className="relative w-full max-w-xl my-6 rounded-3xl bg-slate-950/95 border shadow-2xl overflow-hidden p-6 sm:p-8 transition-all duration-300"
         style={{

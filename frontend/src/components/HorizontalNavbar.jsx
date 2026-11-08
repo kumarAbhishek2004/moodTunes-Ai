@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
-import { playSong, openQueue } from '../store/audioSlice';
+import { playSong, openQueue, toggleVoiceDJ } from '../store/audioSlice';
 import { logout } from '../store/authSlice';
 import { resolveMusicTheme } from '../utils/themeMap';
 import { playSongWithSimilarQueue, handlePlayNext, handleAddToQueue } from '../utils/queueHelper';
@@ -16,6 +16,7 @@ const HorizontalNavbar = () => {
   const { user, isAuthenticated } = useSelector((state) => state.auth);
   const currentSong = useSelector((state) => state.audio.currentSong);
   const activeMood = useSelector((state) => state.audio.activeMood) || 'happy';
+  const voiceDJ = useSelector((state) => state.audio.voiceDJ);
 
   // Strict guideline: dynamically adapt all navbar accents to playing track's genre & mood
   const theme = resolveMusicTheme(currentSong, activeMood);
@@ -97,7 +98,6 @@ const HorizontalNavbar = () => {
 
   const handleSelectSong = (song) => {
     playSongWithSimilarQueue(dispatch, song, 11);
-    dispatch(openQueue());
     setIsSearchOpen(false);
     setSearchQuery('');
   };
@@ -192,7 +192,28 @@ const HorizontalNavbar = () => {
         {/* ========================================================= */}
         {/* RIGHT: Search Shortcut + User Profile Dropdown            */}
         {/* ========================================================= */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Hands-Free "Hey Abhi" Voice DJ Toggle Button */}
+          <button
+            onClick={() => dispatch(toggleVoiceDJ())}
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all duration-300 cursor-pointer ${
+              voiceDJ?.isEnabled
+                ? 'bg-cyan-500/20 text-cyan border-cyan/60 shadow-lg shadow-cyan/25 scale-105'
+                : 'bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border-white/10'
+            }`}
+            title={
+              voiceDJ?.isEnabled
+                ? 'Hands-Free "Hey Abhi" is Active! Say "Hey Abhi, play [song]" or "play from my playlist"'
+                : 'Turn on Hands-Free "Hey Abhi" Voice DJ'
+            }
+          >
+            <span className={`text-xs ${voiceDJ?.isEnabled ? 'animate-bounce' : ''}`}>🎙️</span>
+            <span className="font-mono text-xs font-bold">Hey Abhi</span>
+            {voiceDJ?.isEnabled && (
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan animate-ping hidden md:inline" />
+            )}
+          </button>
+
           {/* Search Trigger */}
           <button
             onClick={() => setIsSearchOpen(true)}

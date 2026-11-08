@@ -17,7 +17,7 @@ const MoodElevationToast = () => {
   if (!toast) return null;
 
   return (
-    <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg px-4 pointer-events-none animate-slideDown">
+    <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[110] w-full max-w-lg px-4 pointer-events-none animate-slideDown">
       <div className="pointer-events-auto p-4 rounded-2xl bg-gradient-to-r from-amber-950/90 via-obsidian-900/95 to-slate-900/95 border border-amber-500/40 shadow-2xl backdrop-blur-xl flex items-start gap-3.5 text-white">
         {/* Glow Brain Icon */}
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-lg shadow-lg shadow-amber-500/30 flex-shrink-0 animate-pulse">

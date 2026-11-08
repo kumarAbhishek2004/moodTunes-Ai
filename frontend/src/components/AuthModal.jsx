@@ -60,7 +60,7 @@ const AuthModal = ({ isOpen, onClose, onSuccess }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-sm">
       <div className="bg-gradient-to-br from-gray-900 to-black border border-purple-500/30 rounded-3xl shadow-2xl max-w-md w-full mx-4 p-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">

@@ -5,6 +5,7 @@ Guarantees that playlists are NEVER lost even across server restarts or database
 import os
 import json
 import threading
+import uuid
 from typing import List, Optional
 from datetime import datetime
 from bson import ObjectId
@@ -30,13 +31,18 @@ def _load_local_playlists() -> dict:
 
 def _save_local_playlists(data: dict):
     os.makedirs(DATA_DIR, exist_ok=True)
+    tmp_file = f"{LOCAL_PLAYLISTS_FILE}.{os.getpid()}_{uuid.uuid4().hex}.tmp"
     try:
-        tmp_file = LOCAL_PLAYLISTS_FILE + ".tmp"
         with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         os.replace(tmp_file, LOCAL_PLAYLISTS_FILE)
     except Exception as e:
         print(f"Error saving local playlists: {e}")
+        if os.path.exists(tmp_file):
+            try:
+                os.remove(tmp_file)
+            except Exception:
+                pass
 
 class PlaylistService:
     """Service for playlist operations with guaranteed persistence"""

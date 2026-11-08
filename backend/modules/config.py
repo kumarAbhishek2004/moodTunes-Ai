@@ -45,7 +45,12 @@ class Config:
     # Server Configuration
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    RELOAD: bool = True
+    RELOAD: bool = False
+    
+    # Concurrency and Multiprocessing
+    CPU_CORES: int = os.cpu_count() or 2
+    DEFAULT_WORKERS: int = min(max(1, (os.cpu_count() or 2)), 4)
+    WORKERS: int = int(os.getenv("WORKERS", str(DEFAULT_WORKERS)))
     
     # CORS Configuration
     CORS_ORIGINS = ["http://localhost:3000", "http://localhost:5173"]

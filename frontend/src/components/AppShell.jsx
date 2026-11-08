@@ -14,6 +14,8 @@ import SleepTimerModal from './SleepTimerModal';
 import ShortcutsModal from './ShortcutsModal';
 import MoodElevationToast from './MoodElevationToast';
 import VibeCardModal from './VibeCardModal';
+import VoiceDJOverlay from './VoiceDJOverlay';
+import { useVoiceDJ } from '../hooks/useVoiceDJ';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { checkAndTriggerMoodElevation } from '../utils/moodElevationEngine';
 import { useEffect } from 'react';
@@ -86,6 +88,9 @@ const AppShell = ({ children }) => {
   // Strict guideline: When music is playing, colors dynamically adapt to song's mood and genre!
   const glow = resolveMusicTheme(currentSong, activeMood);
   const isAuthRoute = location.pathname === '/login';
+
+  // Feature 6: Hands-Free Voice DJ ('Hey Abhi') Hook
+  useVoiceDJ();
 
   // Feature 2: Global Keyboard Shortcuts Hook
   const { toastMessage: shortcutToast } = useKeyboardShortcuts();
@@ -172,26 +177,6 @@ const AppShell = ({ children }) => {
             }}
           />
 
-          {/* Feature 1: Sleep Timer Modal */}
-          <SleepTimerModal />
-
-          {/* Feature 2: Keyboard Shortcuts Help Modal */}
-          <ShortcutsModal />
-
-          {/* Feature 4: Smart Mood Elevation Toast Banner */}
-          <MoodElevationToast />
-
-          {/* Feature 5: Shareable Vibe Card Modal */}
-          <VibeCardModal />
-
-          {/* Keyboard Shortcut Active Feedback Pill */}
-          {shortcutToast && (
-            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 py-1.5 px-4 rounded-full bg-obsidian-950/95 border border-white/20 text-white text-xs font-mono font-bold shadow-2xl backdrop-blur-xl animate-fadeIn pointer-events-none flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-cyan animate-pulse" />
-              <span>{shortcutToast}</span>
-            </div>
-          )}
-
           {/* Fullscreen Vinyl Turntable Modal (Expanded Interface) */}
           {isTurntableOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/85 backdrop-blur-3xl animate-fadeIn">
@@ -205,6 +190,29 @@ const AppShell = ({ children }) => {
               >
                 <TurntablePlayer isModal={true} onClose={() => dispatch(toggleTurntable())} />
               </div>
+            </div>
+          )}
+
+          {/* Feature 1: Sleep Timer Modal (z-[100] to sit cleanly above Turntable Player) */}
+          <SleepTimerModal />
+
+          {/* Feature 2: Keyboard Shortcuts Help Modal (z-[100]) */}
+          <ShortcutsModal />
+
+          {/* Feature 4: Smart Mood Elevation Toast Banner (z-[110]) */}
+          <MoodElevationToast />
+
+          {/* Feature 5: Shareable Vibe Card Modal (z-[100] to sit cleanly above Turntable Player) */}
+          <VibeCardModal />
+
+          {/* Feature 6: Hands-Free Voice DJ ('Hey Abhi') Assistant Overlay (z-[120]) */}
+          <VoiceDJOverlay />
+
+          {/* Keyboard Shortcut Active Feedback Pill (z-[110]) */}
+          {shortcutToast && (
+            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[110] py-1.5 px-4 rounded-full bg-obsidian-950/95 border border-white/20 text-white text-xs font-mono font-bold shadow-2xl backdrop-blur-xl animate-fadeIn pointer-events-none flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-cyan animate-pulse" />
+              <span>{shortcutToast}</span>
             </div>
           )}
         </div>

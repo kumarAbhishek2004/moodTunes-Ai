@@ -1180,13 +1180,13 @@ const PlaylistsPage = () => {
             {/* Tracklist Table */}
             <div className="bg-slate-950/60 backdrop-blur-xl rounded-3xl border border-white/10 overflow-hidden shadow-xl">
               
-              {/* Table Column Headers (12 Columns: 1 + 4 + 3 + 1 + 3) */}
+              {/* Table Column Headers (12 Columns: 1 + 4 + 2 + 1 + 4 = 12 desktop, 1 + 4 + 3 + 0 + 4 = 12 tablet) */}
               <div className="grid grid-cols-12 px-4 sm:px-5 py-3 text-xs font-mono uppercase tracking-wider text-slate-400 border-b border-white/5 bg-slate-900/40 items-center">
                 <div className="col-span-1 text-center"># / Drag</div>
-                <div className="col-span-5 sm:col-span-4">Title</div>
-                <div className="col-span-3 sm:col-span-3">Artist</div>
+                <div className="col-span-5 sm:col-span-4 md:col-span-4">Title</div>
+                <div className="col-span-3 sm:col-span-3 md:col-span-2">Artist</div>
                 <div className="col-span-1 hidden md:block text-center">Time</div>
-                <div className="col-span-3 sm:col-span-4 text-right pr-2">Queue & Actions</div>
+                <div className="col-span-3 sm:col-span-4 md:col-span-4 text-right pr-2">Queue & Actions</div>
               </div>
 
               {/* Empty Playlist State (User will add songs themselves!) */}
@@ -1273,7 +1273,7 @@ const PlaylistsPage = () => {
                         {/* Column 2: Artwork & Title */}
                         <div
                           onClick={() => handlePlayTrack(track, idx)}
-                          className="col-span-5 sm:col-span-4 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2 cursor-pointer"
+                          className="col-span-5 sm:col-span-4 md:col-span-4 flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2 cursor-pointer"
                         >
                           <img
                             src={resolveTrackArtwork(track)}
@@ -1305,7 +1305,7 @@ const PlaylistsPage = () => {
                         {/* Column 3: Artist */}
                         <div
                           onClick={() => handlePlayTrack(track, idx)}
-                          className="col-span-3 sm:col-span-3 min-w-0 cursor-pointer"
+                          className="col-span-3 sm:col-span-3 md:col-span-2 min-w-0 cursor-pointer"
                         >
                           <p className="text-xs text-slate-400 group-hover:text-slate-300 truncate">
                             {track.artist}
@@ -1317,12 +1317,12 @@ const PlaylistsPage = () => {
                           {formatSongDuration(track.duration)}
                         </div>
 
-                        {/* Column 5: Queue Adjustments & Actions */}
-                        <div className="col-span-3 sm:col-span-4 flex items-center justify-end gap-1.5 text-right flex-shrink-0">
+                        {/* Column 5: Queue Adjustments & Actions (Spacious, Aligned, Never Cramped) */}
+                        <div className="col-span-3 sm:col-span-4 md:col-span-4 flex items-center justify-end gap-1.5 sm:gap-2 text-right flex-shrink-0">
                           {/* Play Next in Queue Button */}
                           <button
                             onClick={(e) => handlePlayNextInQueue(track, e)}
-                            className="px-2 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] sm:text-[11px] font-mono font-bold transition-all hover:scale-105 whitespace-nowrap cursor-pointer shadow-sm"
+                            className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] sm:text-xs font-mono font-bold transition-all hover:scale-105 whitespace-nowrap cursor-pointer shadow-sm"
                             title="Make this song play next in queue"
                           >
                             ⚡ Next
@@ -1331,18 +1331,18 @@ const PlaylistsPage = () => {
                           {/* Add to Queue Button */}
                           <button
                             onClick={(e) => handleAddToUpcomingQueue(track, e)}
-                            className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-[10px] sm:text-[11px] font-mono font-bold transition-all hover:scale-105 whitespace-nowrap cursor-pointer hidden sm:inline-flex"
+                            className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-[10px] sm:text-xs font-mono font-bold transition-all hover:scale-105 whitespace-nowrap cursor-pointer hidden sm:inline-flex"
                             title="Add to upcoming queue"
                           >
                             + Queue
                           </button>
 
                           {/* Move Up / Down Quick Buttons */}
-                          <div className="hidden lg:flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                          <div className="hidden lg:flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={(e) => handleMoveSong(idx, 'up', e)}
                               disabled={idx === 0}
-                              className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white disabled:opacity-20 cursor-pointer text-[10px]"
+                              className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white disabled:opacity-20 cursor-pointer text-xs"
                               title="Move Up in Playlist & Queue"
                             >
                               ▲
@@ -1350,7 +1350,7 @@ const PlaylistsPage = () => {
                             <button
                               onClick={(e) => handleMoveSong(idx, 'down', e)}
                               disabled={idx === activePlaylist.songs.length - 1}
-                              className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white disabled:opacity-20 cursor-pointer text-[10px]"
+                              className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white disabled:opacity-20 cursor-pointer text-xs"
                               title="Move Down in Playlist & Queue"
                             >
                               ▼
@@ -1360,7 +1360,7 @@ const PlaylistsPage = () => {
                           {/* Play Button */}
                           <button
                             onClick={() => handlePlayTrack(track, idx)}
-                            className="w-7 h-7 rounded-lg bg-red-600/80 hover:bg-red-600 flex items-center justify-center text-white shrink-0 shadow transition-transform group-hover:scale-105 cursor-pointer"
+                            className="w-8 h-8 rounded-lg bg-red-600/80 hover:bg-red-600 flex items-center justify-center text-white shrink-0 shadow transition-transform group-hover:scale-105 cursor-pointer"
                             title="Play Track"
                           >
                             <svg className="w-3.5 h-3.5 translate-x-0.2" fill="currentColor" viewBox="0 0 24 24">
@@ -1374,7 +1374,7 @@ const PlaylistsPage = () => {
                               e.stopPropagation();
                               handleRemoveTrackFromPlaylist(track.id);
                             }}
-                            className="w-7 h-7 rounded-lg bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 flex items-center justify-center text-xs transition cursor-pointer"
+                            className="w-8 h-8 rounded-lg bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 flex items-center justify-center text-xs transition cursor-pointer"
                             title="Remove from playlist"
                           >
                             ✕

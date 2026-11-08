@@ -14,6 +14,7 @@ from typing import List, Dict, Optional
 import json
 import re
 from .models import MoodDetectionResponse, EmotionScore
+from .website_knowledge_base import knowledge_base
 
 load_dotenv()
 
@@ -51,6 +52,7 @@ CORE CAPABILITIES:
 3. Recommendations: Suggest songs based on mood, genre, or artist
 4. Song Search: Find songs by lyrics, artist name, or description
 5. Conversational: Engage naturally about music
+6. Complete Website & Platform Knowledge: You have deep, complete knowledge of the entire MoodTunes AI platform (Sleep Timer Fade-Out Mode, Hands-Free Voice DJ 'Hey Abhi', 360° Rotary Mood Dial, Webcam Face Emotion Detection, Acoustic Voice Tone Analysis, Text Scene Synthesis, Custom Mood Playlists, Drag-and-Drop Queue, 12" Vinyl Turntable Studio, 1080p Video Mode, Shareable Vibe Cards, Keyboard Shortcuts, and Guest vs Member accounts). When users ask about any feature, how to do something, or how a feature works, explain it clearly, warmly, and helpfully!
 
 RESPONSE FORMATS:
 
@@ -134,7 +136,11 @@ You: "Here are popular Taylor Swift songs:
 [RECOMMEND: Blank Space - Taylor Swift]
 [RECOMMEND: Anti-Hero - Taylor Swift]"
 
-Remember: Always use standard ASCII hyphen (-) between song and artist. Always include singer/artist name. Be helpful, friendly, and music-focused!"""
+Remember: Always use standard ASCII hyphen (-) between song and artist. Always include singer/artist name.
+RESPONSE STYLE:
+- Keep all explanations concise, punchy, and summarized in 2 to 4 crisp bullet points.
+- Never write overwhelming walls of text or giant manuals.
+- Be helpful, friendly, and clear!"""
         
         self._initialize_chat()
 
@@ -197,9 +203,13 @@ Remember: Always use standard ASCII hyphen (-) between song and artist. Always i
         self._cached_groq_model = "openai/gpt-oss-20b"
         return self._cached_groq_model
 
-    def _get_groq_response(self, user_message: str) -> str:
-        """Get response from Groq"""
-        messages = [{"role": "system", "content": self.system_prompt}]
+    def _get_groq_response(self, user_message: str, rag_context: Optional[str] = None) -> str:
+        """Get response from Groq with optional RAG platform knowledge"""
+        sys_prompt = self.system_prompt
+        if rag_context:
+            sys_prompt += f"\n\n{rag_context}"
+
+        messages = [{"role": "system", "content": sys_prompt}]
         
         for msg in self.conversation_history[-10:]:
             messages.append({
@@ -290,24 +300,30 @@ Remember: Always use standard ASCII hyphen (-) between song and artist. Always i
 
     def chat_with_user(self, user_message: str) -> Dict:
         """
-        Enhanced chat with better song detection and playlist support
+        Enhanced chat with website vector knowledge retrieval (RAG), song detection, and playlist support
         """
         try:
+            # Semantic RAG Retrieval: Check Vector Knowledge Base for website knowledge
+            rag_context = knowledge_base.format_rag_context(user_message)
+            if rag_context:
+                print(f"🧠 RAG Knowledge context injected for: '{user_message}'")
+
             # Try Gemini first
             if self.current_provider == 'gemini' and self.chat:
                 try:
-                    response = self.chat.send_message(user_message)
+                    prompt_to_send = f"[AUTHENTIC PLATFORM KNOWLEDGE]:\n{rag_context}\n\nUser Question: {user_message}" if rag_context else user_message
+                    response = self.chat.send_message(prompt_to_send)
                     bot_response = response.text
                 except Exception as e:
                     print(f"⚠️  Gemini request failed: {e}")
                     if self.groq_client:
                         self._switch_to_groq()
-                        bot_response = self._get_groq_response(user_message)
+                        bot_response = self._get_groq_response(user_message, rag_context=rag_context)
                     else:
                         raise e
             # Use Groq
             elif self.groq_client:
-                bot_response = self._get_groq_response(user_message)
+                bot_response = self._get_groq_response(user_message, rag_context=rag_context)
             else:
                 raise Exception("No API provider available")
 

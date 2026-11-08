@@ -43,5 +43,36 @@
       "updated_at": "2026-11-08T04:32:58.538301",
       "id": "6aeff793d4e2483496750fec"
     }
+  ],
+  "user_1794133687_c66785": [
+    {
+      "id": "pl_1794135580_173914",
+      "user_id": "user_1794133687_c66785",
+      "name": "rap",
+      "description": "Created from player",
+      "mood": "energetic",
+      "cover": null,
+      "songs": [
+        {
+          "id": "yt_0-LsaHNR6No",
+          "name": "Not Like You | ()",
+          "artist": "Hammy Muzic",
+          "lastfm_url": null,
+          "youtube_id": "0-LsaHNR6No",
+          "preview_url": "https://www.youtube.com/watch?v=0-LsaHNR6No",
+          "album": null,
+          "duration_ms": null,
+          "listeners": null,
+          "playcount": null,
+          "tags": [],
+          "audio_features": {},
+          "ai_explanation": null,
+          "mood_match": "energetic"
+        }
+      ],
+      "is_public": false,
+      "created_at": "2026-11-08T16:29:40.686076",
+      "updated_at": "2026-11-08T16:29:40.686076"
+    }
   ]
 }

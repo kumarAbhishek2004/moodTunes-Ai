@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
   togglePlayPause,
+  setPlaying,
   playNext,
   playPrevious,
   seekTo,
@@ -12,6 +13,7 @@ import {
   cycleRepeatMode,
   toggleTurntable,
   toggleQueue,
+  closeQueue,
   setVideoMode,
   playSongAtIndex,
   closePlayer,
@@ -186,6 +188,10 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
 
   useEffect(() => {
     if (!currentSong) return;
+    // Guarantee that turntable immediately engages into active playing when loaded
+    if (!isPlaying) {
+      dispatch(setPlaying(true));
+    }
     try {
       const stored = localStorage.getItem('liked_songs');
       if (stored) {
@@ -193,7 +199,7 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
         setIsLiked(!!map[currentSong.id || `${currentSong.name}-${currentSong.artist}`]);
       }
     } catch (e) {}
-  }, [currentSong]);
+  }, [currentSong?.id, currentSong?.name]);
 
   const toggleLike = () => {
     if (!currentSong) return;
@@ -225,6 +231,7 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
       )}&autoplay=1`;
 
   const handleClose = () => {
+    dispatch(closeQueue());
     if (onClose) {
       onClose();
     } else {
@@ -355,7 +362,7 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
             <span>🌙</span>
             <span className="hidden sm:inline">
               {sleepTimer?.active
-                ? (sleepTimer.isEndOfTrack ? 'Track' : `${Math.ceil(sleepTimer.remainingSeconds / 60)}m`)
+                ? (sleepTimer?.isEndOfTrack ? 'Track' : `${Math.ceil((sleepTimer?.remainingSeconds ?? 0) / 60)}m`)
                 : 'Timer'}
             </span>
           </button>

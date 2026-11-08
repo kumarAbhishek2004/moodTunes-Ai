@@ -75,6 +75,15 @@ const initialState = {
   // Feature 5: Shareable Vibe Card
   isVibeCardOpen: false,
   vibeCardSong: null,
+
+  // Feature 6: Hands-Free Voice DJ ("Hey Abhi")
+  voiceDJ: {
+    isEnabled: true,
+    wakeStatus: 'idle', // 'idle' | 'wake_detected' | 'processing' | 'success' | 'error'
+    transcript: '',
+    feedbackText: '',
+    feedbackType: '', // 'youtube' | 'playlist' | 'control' | 'mood' | 'error'
+  },
 };
 
 export const audioSlice = createSlice({
@@ -418,11 +427,20 @@ export const audioSlice = createSlice({
       state.isTurntableOpen = !state.isTurntableOpen;
     },
 
+    closeTurntable: (state) => {
+      state.isTurntableOpen = false;
+    },
     toggleQueue: (state) => {
       state.isQueueOpen = !state.isQueueOpen;
     },
     openQueue: (state) => {
       state.isQueueOpen = true;
+    },
+    closeQueue: (state) => {
+      state.isQueueOpen = false;
+    },
+    setQueueOpen: (state, action) => {
+      state.isQueueOpen = Boolean(action.payload);
     },
 
     toggleShuffle: (state) => {
@@ -620,6 +638,40 @@ export const audioSlice = createSlice({
       state.isVibeCardOpen = false;
       state.vibeCardSong = null;
     },
+
+    // Feature 6: Hands-Free Voice DJ Reducers
+    toggleVoiceDJ: (state) => {
+      state.voiceDJ.isEnabled = !state.voiceDJ.isEnabled;
+      if (!state.voiceDJ.isEnabled) {
+        state.voiceDJ.wakeStatus = 'idle';
+        state.voiceDJ.transcript = '';
+        state.voiceDJ.feedbackText = '';
+      }
+    },
+    setVoiceDJEnabled: (state, action) => {
+      state.voiceDJ.isEnabled = Boolean(action.payload);
+      if (!state.voiceDJ.isEnabled) {
+        state.voiceDJ.wakeStatus = 'idle';
+        state.voiceDJ.transcript = '';
+        state.voiceDJ.feedbackText = '';
+      }
+    },
+    setVoiceDJStatus: (state, action) => {
+      state.voiceDJ.wakeStatus = action.payload;
+    },
+    setVoiceDJTranscript: (state, action) => {
+      state.voiceDJ.transcript = action.payload;
+    },
+    setVoiceDJFeedback: (state, action) => {
+      state.voiceDJ.feedbackText = action.payload.text || '';
+      state.voiceDJ.feedbackType = action.payload.type || '';
+      state.voiceDJ.wakeStatus = action.payload.status || 'success';
+    },
+    clearVoiceDJFeedback: (state) => {
+      state.voiceDJ.wakeStatus = 'idle';
+      state.voiceDJ.transcript = '';
+      state.voiceDJ.feedbackText = '';
+    },
   },
 });
 
@@ -647,8 +699,11 @@ export const {
   toggleTurntable,
   setVideoMode,
   toggleVideoMode,
+  closeTurntable,
   toggleQueue,
   openQueue,
+  closeQueue,
+  setQueueOpen,
   toggleShuffle,
   cycleRepeatMode,
   playSongAtIndex,
@@ -680,6 +735,14 @@ export const {
   // Feature 5
   openVibeCard,
   closeVibeCard,
+
+  // Feature 6: Voice DJ
+  toggleVoiceDJ,
+  setVoiceDJEnabled,
+  setVoiceDJStatus,
+  setVoiceDJTranscript,
+  setVoiceDJFeedback,
+  clearVoiceDJFeedback,
 } = audioSlice.actions;
 
 export default audioSlice.reducer;

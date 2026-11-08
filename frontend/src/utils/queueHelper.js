@@ -3,7 +3,7 @@ import { API_BASE_URL } from '../config/api';
 import { playSong, setQueue, addToPlayNext, addToQueue } from '../store/audioSlice';
 
 // Rich backup pool of well-known, high-quality songs across all moods/genres
-const FALLBACK_SIMILAR_TRACKS = [
+export const FALLBACK_SIMILAR_TRACKS = [
   { name: 'Kesariya', artist: 'Arijit Singh', mood_match: 'romantic', duration: 268, youtube_id: 'BddP6PYo2gs', image: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=200&auto=format&fit=crop&q=80' },
   { name: 'Raataan Lambiyan', artist: 'Jubin Nautiyal, Asees Kaur', mood_match: 'romantic', duration: 230, youtube_id: 'gvyUuxdRdR4', image: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=200&auto=format&fit=crop&q=80' },
   { name: 'Apna Bana Le', artist: 'Arijit Singh', mood_match: 'romantic', duration: 261, youtube_id: 'ElZfdU54Cp8', image: 'https://images.unsplash.com/photo-1518895949257-7621c3c786d7?w=200&auto=format&fit=crop&q=80' },

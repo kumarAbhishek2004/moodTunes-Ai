@@ -86,7 +86,7 @@ const PersistentAudioEngine = () => {
         width: '100%',
         videoId: currentSong?.youtube_id || '',
         playerVars: {
-          autoplay: 0,
+          autoplay: 1,
           controls: 0,
           disablekb: 1,
           fs: 0,
@@ -99,8 +99,10 @@ const PersistentAudioEngine = () => {
           onReady: (event) => {
             const vol = isMuted ? 0 : volume;
             event.target.setVolume(vol);
-            if (currentSong?.youtube_id && isPlaying) {
-              event.target.playVideo();
+            if (currentSong?.youtube_id) {
+              try {
+                event.target.playVideo();
+              } catch (e) {}
             }
           },
           onStateChange: (event) => {
@@ -110,11 +112,17 @@ const PersistentAudioEngine = () => {
             }
             // YT.PlayerState.PLAYING = 1
             else if (event.data === 1) {
+              isTransitioningRef.current = false;
+              dispatch(setPlaying(true));
+            }
+            // YT.PlayerState.BUFFERING = 3
+            else if (event.data === 3) {
+              // Buffering to start playback: retain playing state so vinyl keeps spinning
               dispatch(setPlaying(true));
             }
             // YT.PlayerState.PAUSED = 2
             else if (event.data === 2) {
-              // Ignore pause if we are in the middle of track transition
+              // ONLY dispatch pause if not during track transition/loading
               if (!isTransitioningRef.current) {
                 dispatch(setPlaying(false));
               }
@@ -153,13 +161,36 @@ const PersistentAudioEngine = () => {
     const loadAndPlay = (vidId) => {
       if (!playerRef.current || typeof playerRef.current.loadVideoById !== 'function') return;
       try {
+        isTransitioningRef.current = true;
+        dispatch(setPlaying(true));
         playerRef.current.loadVideoById(vidId);
         if (playerRef.current.playVideo) {
           playerRef.current.playVideo();
         }
-        dispatch(setPlaying(true));
+
+        // Multiple rapid kickstart ticks to guarantee instant playback without double-clicking
+        setTimeout(() => {
+          try {
+            if (playerRef.current && playerRef.current.playVideo) {
+              playerRef.current.playVideo();
+            }
+          } catch (e) {}
+        }, 200);
+
+        setTimeout(() => {
+          try {
+            if (playerRef.current && playerRef.current.playVideo) {
+              playerRef.current.playVideo();
+            }
+          } catch (e) {}
+        }, 600);
+
+        setTimeout(() => {
+          isTransitioningRef.current = false;
+        }, 1500);
       } catch (e) {
         console.error('Error loading video by ID:', e);
+        isTransitioningRef.current = false;
       }
     };
 

@@ -112,6 +112,7 @@ from modules.artwork_service import artwork_service
 from modules.user_service import user_service
 
 from modules.playlist_service import playlist_service
+from modules.website_knowledge_base import knowledge_base
 
 
 
@@ -166,6 +167,7 @@ app.add_middleware(
 # -----------------------------------------------------------
 import os
 import json
+import uuid
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -183,14 +185,19 @@ def _load_json_store(filename, default_val):
 def _save_json_store(filename, data):
     os.makedirs(DATA_DIR, exist_ok=True)
     filepath = os.path.join(DATA_DIR, filename)
+    tmp = f"{filepath}.{os.getpid()}_{uuid.uuid4().hex}.tmp"
     try:
-        tmp = filepath + ".tmp"
         from fastapi.encoders import jsonable_encoder
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(jsonable_encoder(data), f, indent=2, ensure_ascii=False)
         os.replace(tmp, filepath)
     except Exception as e:
         print(f"Error persisting {filename}: {e}")
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
 
 # Initial load from disk
 _saved_playlists = _load_json_store("public_playlists.json", {})
@@ -662,12 +669,15 @@ async def clear_chat_history(user_id: str):
 # ===========================================================
 
 @app.post("/voice/transcribe")
+@app.post("/voice/transcribe-detailed")
 
 async def transcribe_voice(file: UploadFile = File(...), language: str = "auto"):
 
+    if hasattr(voice_to_text, 'transcribe_audio_multilang'):
+        return await voice_to_text.transcribe_audio_multilang(file)
     transcript = await voice_to_text.transcribe_audio(file, language)
 
-    return {"transcript": transcript, "language": language}
+    return {"transcript": transcript, "language": language, "detected_language": language, "language_name": language, "confidence": 0.95}
 
 
 
@@ -857,6 +867,112 @@ async def create_user_playlist(
 async def get_my_playlists(current_user: dict = Depends(get_current_user)):
 
     return await playlist_service.get_user_playlists(current_user["user_id"])
+
+
+# ==============================================================
+# Website Knowledge Base & Vector Search (RAG) Endpoints
+# ==============================================================
+@app.get("/api/knowledge/search")
+async def search_website_knowledge(query: str, top_k: int = 3):
+    """
+    Search the website's vector knowledge base using semantic cosine similarity.
+    Returns the top-k most relevant platform knowledge chunks.
+    """
+    if not query or not query.strip():
+        return {"query": query, "results": []}
+
+    matches = knowledge_base.retrieve(query, top_k=top_k, min_similarity=0.05)
+    formatted = [
+        {
+            "id": chunk["id"],
+            "title": chunk["title"],
+            "category": chunk.get("category", "general"),
+            "content": chunk["content"],
+            "score": round(score, 4),
+        }
+        for chunk, score in matches
+    ]
+    return {
+        "query": query,
+        "total_matches": len(formatted),
+        "results": formatted
+    }
+
+@app.post("/api/knowledge/reindex")
+async def reindex_website_knowledge():
+    """Rebuilds the vector index from website knowledge documents"""
+    knowledge_base._initialize()
+    return {"status": "success", "total_chunks": len(knowledge_base.chunks)}
+
+
+# Direct Voice Database Search (Matches songs inside all user/database playlists)
+@app.get("/api/voice/search-database")
+async def voice_search_database(
+    query: str,
+    current_user: Optional[dict] = Depends(get_optional_user)
+):
+    if not query or not query.strip():
+        return {"found": False, "song": None}
+
+    import re
+
+    def _normalize(text: str) -> str:
+        if not text:
+            return ""
+        t = text.lower()
+        t = re.sub(r'[|()\[\]{}\-_/\:;"\'.,!@#$%^&*~`]', ' ', t)
+        t = re.sub(r'\b(official video|official audio|lyrics|lyric video|music video|remix|hd|4k|feat|ft)\b', ' ', t, flags=re.I)
+        t = re.sub(r'\b(song|track|music|audio|tune)\b', ' ', t, flags=re.I)
+        return re.sub(r'\s+', ' ', t).strip()
+
+    def _match_song(s_name: str, s_artist: str, q: str) -> bool:
+        norm_s = _normalize(s_name)
+        norm_q = _normalize(q)
+        norm_artist = _normalize(s_artist)
+        if not norm_s or not norm_q:
+            return False
+        if norm_s == norm_q or norm_q in norm_s or norm_s in norm_q:
+            return True
+        s_words = set(norm_s.split())
+        q_words = set(norm_q.split())
+        if q_words and q_words.issubset(s_words):
+            return True
+        if norm_artist and (norm_artist in norm_q or norm_q in norm_artist):
+            return True
+        return False
+
+    # 1. Search in local JSON playlists store
+    local_playlists = _load_json_store('playlists.json', {})
+    if isinstance(local_playlists, dict):
+        user_id = current_user.get("user_id") if current_user else None
+        if user_id and user_id in local_playlists:
+            for pl in local_playlists[user_id]:
+                if isinstance(pl, dict):
+                    for s in pl.get("songs", []):
+                        if _match_song(s.get("name", ""), s.get("artist", ""), query):
+                            return {"found": True, "song": s, "playlist": pl.get("name", "My Playlist")}
+
+        for uid, pl_list in local_playlists.items():
+            if isinstance(pl_list, list):
+                for pl in pl_list:
+                    if isinstance(pl, dict):
+                        for s in pl.get("songs", []):
+                            if _match_song(s.get("name", ""), s.get("artist", ""), query):
+                                return {"found": True, "song": s, "playlist": pl.get("name", "Playlist")}
+
+    # 2. Search in MongoDB if available
+    try:
+        database = get_database()
+        if database is not None:
+            cursor = database.playlists.find({"songs": {"$exists": True, "$ne": []}})
+            async for pl in cursor:
+                for s in pl.get("songs", []):
+                    if _match_song(s.get("name", ""), s.get("artist", ""), query):
+                        return {"found": True, "song": s, "playlist": pl.get("name", "Playlist")}
+    except Exception:
+        pass
+
+    return {"found": False, "song": None}
 
 
 
@@ -1310,14 +1426,30 @@ async def root():
 # ===========================================================
 
 if __name__ == "__main__":
-
+    import multiprocessing
+    multiprocessing.freeze_support()
     import uvicorn
+    import argparse
 
-    print("\n" + "=" * 70)
+    parser = argparse.ArgumentParser(description="MoodTunes AI Multi-Worker Server")
+    parser.add_argument("--workers", "-w", type=int, default=None, help="Number of worker processes for multiprocessing")
+    parser.add_argument("--dev", action="store_true", help="Run in single-worker auto-reload development mode")
+    parser.add_argument("--port", "-p", type=int, default=Config.PORT, help="Server port (default: 8000)")
+    parser.add_argument("--host", type=str, default=Config.HOST, help="Server host (default: 0.0.0.0)")
+    args = parser.parse_args()
 
-    print("🎵 MoodTunes AI - Music Recommendation System")
+    num_workers = args.workers if args.workers is not None else (1 if args.dev else Config.WORKERS)
+    is_reload = args.dev or (Config.RELOAD and num_workers == 1)
 
-    print("=" * 70)
+    print("\n" + "=" * 72)
+    print("🎵 MoodTunes AI - High-Concurrency Music Recommendation System")
+    print(f"⚡ Mode: {'Development (Single-Worker with Hot-Reload)' if is_reload else f'Multi-User Multiprocessing ({num_workers} Workers)'}")
+    print(f"💻 CPU Cores: {Config.CPU_CORES} | Active Workers: {num_workers}")
+    print(f"🌐 Server Address: http://{'127.0.0.1' if args.host == '0.0.0.0' else args.host}:{args.port}")
+    print("=" * 72 + "\n")
 
-    uvicorn.run("main:app", host=Config.HOST, port=Config.PORT, reload=Config.RELOAD)
+    if is_reload:
+        uvicorn.run("main:app", host=args.host, port=args.port, reload=True)
+    else:
+        uvicorn.run("main:app", host=args.host, port=args.port, workers=num_workers)
 
