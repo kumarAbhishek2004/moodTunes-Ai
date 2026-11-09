@@ -1,12 +1,20 @@
-# Python-generated files
+# Python
 __pycache__/
 *.py[oc]
 build/
 dist/
 wheels/
 *.egg-info
+.venv/
+venv/
 
-# Virtual environments
-.venv
+# Environment & Secrets
 .env
+.env.*
+!.env.example
+.env.auth
+
+# Temporary scripts & caches
+*.tmp
+*.log
 get_lakshman_transcript.py

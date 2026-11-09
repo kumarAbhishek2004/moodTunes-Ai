@@ -1,15 +1,14 @@
-# Project Roadmaps & Scratch Notes
-task.md
-*.bat
-check_vercel.py
-test_*.py
-
-# Environments & Secrets
+# ==============================================================
+# Environment & Secrets (Crucial: Never commit real credentials)
+# ==============================================================
 .env
 .env.*
 !.env.example
+*.env.auth
 
-# Python
+# ==============================================================
+# Python & Virtual Environments
+# ==============================================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -19,19 +18,42 @@ build/
 dist/
 wheels/
 *.egg-info/
-.venv
+.venv/
 venv/
+*.pyc
 
-# Node / Frontend
+# ==============================================================
+# Node & Frontend
+# ==============================================================
 node_modules/
 dist/
 .vite/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+package-lock.json
 
-# OS & Editor
+# ==============================================================
+# Caches, Temporary Files & Test Images
+# ==============================================================
+*.tmp
+*.bak
+*.log
 .DS_Store
 Thumbs.db
+youtube_cache.json
+scratch/
+scratch_*
+check_*.py
+test_*.py
+find_*.py
+fix_*.py
+task.md
+
+# ==============================================================
+# IDE & System Files
+# ==============================================================
 .vscode/
 .idea/
+*.swp
+*.swo

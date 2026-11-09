@@ -12,6 +12,7 @@ import {
 } from '../store/audioSlice';
 import { resolveMusicTheme } from '../utils/themeMap';
 import { resolveTrackArtwork, handleArtworkError } from '../utils/imageHelper';
+import AddToQueueModal from './AddToQueueModal';
 
 const formatDuration = (seconds) => {
   if (!seconds || isNaN(seconds)) return '3:45';
@@ -23,6 +24,7 @@ const formatDuration = (seconds) => {
 const QueueDrawer = () => {
   const dispatch = useDispatch();
   const [toastMessage, setToastMessage] = useState(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // Spotify-style Drag and Drop state
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -172,8 +174,21 @@ const QueueDrawer = () => {
             </span>
           </div>
 
-          {/* Quick Header Actions: Shuffle Upcoming & Clear */}
+          {/* Quick Header Actions: Add, Shuffle Upcoming & Clear */}
           <div className="flex items-center gap-1.5">
+            {/* Add Music to Queue Button */}
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="text-xs px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1 cursor-pointer hover:scale-105 active:scale-95 text-slate-950 shadow-md"
+              style={{
+                backgroundColor: theme.accent,
+                boxShadow: `0 2px 10px -2px ${theme.glow}`,
+              }}
+              title="Add songs to queue from playlists or search"
+            >
+              <span className="font-extrabold text-sm leading-none">+</span>
+              <span>Add</span>
+            </button>
             {upcomingCount > 1 && (
               <button
                 onClick={() => {
@@ -489,6 +504,13 @@ const QueueDrawer = () => {
           </button>
         </div>
       </aside>
+
+      {/* Add Music to Queue Modal */}
+      <AddToQueueModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onFeedback={showToast}
+      />
     </>
   );
 };

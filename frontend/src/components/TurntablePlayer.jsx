@@ -135,6 +135,7 @@ import { resolveMusicTheme } from '../utils/themeMap';
 
 
 import { resolveTrackArtwork, handleArtworkError } from '../utils/imageHelper';
+import AddToQueueModal from './AddToQueueModal';
 
 
 
@@ -449,6 +450,7 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
 
 
   const [queueToast, setQueueToast] = useState(null);
+  const [isAddQueueModalOpen, setIsAddQueueModalOpen] = useState(false);
 
 
 
@@ -1500,6 +1502,19 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
 
 
             <div className="flex items-center flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setIsAddQueueModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-md hover:scale-105 active:scale-95 cursor-pointer text-slate-950"
+                style={{
+                  backgroundColor: moodColor,
+                  boxShadow: `0 4px 14px -2px ${moodColor}55`,
+                }}
+                title="Add songs to queue from playlists or search"
+              >
+                <span className="text-sm font-extrabold leading-none">+</span>
+                <span>Add Music</span>
+              </button>
 
 
 
@@ -4007,6 +4022,12 @@ const TurntablePlayer = ({ isModal = false, onClose }) => {
 
 
 
+      {/* Add Music to Queue Modal */}
+      <AddToQueueModal
+        isOpen={isAddQueueModalOpen}
+        onClose={() => setIsAddQueueModalOpen(false)}
+        onFeedback={showQueueToast}
+      />
     </div>
 
 
