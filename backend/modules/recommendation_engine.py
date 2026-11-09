@@ -1819,6 +1819,24 @@ class RecommendationEngine:
                         preview_url=f"https://www.youtube.com/watch?v={vid}",
                         tags=[]
                     ))
+
+            # Direct regex fallback if JSON tree yielded no songs
+            if not songs:
+                raw_ids = re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
+                seen_ids = set()
+                for vid in raw_ids:
+                    if vid not in seen_ids and len(vid) == 11:
+                        seen_ids.add(vid)
+                        songs.append(Song(
+                            id=f"yt_{vid}",
+                            name=clean_q.title()[:100],
+                            artist="YouTube",
+                            youtube_id=vid,
+                            preview_url=f"https://www.youtube.com/watch?v={vid}",
+                            tags=[]
+                        ))
+                        if len(songs) >= limit:
+                            break
         except Exception as err:
             print(f"⚠️ YouTube web scraping notice: {err}")
 

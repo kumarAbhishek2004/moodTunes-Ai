@@ -789,18 +789,13 @@ async def get_basic_recommendations(request: RecommendationRequest):
 
 
 @app.get("/search-music")
-
-
-
 async def search_music(query: str, limit: int = 5):
-
-
-
-    results = await asyncio.to_thread(recommendation_engine.search_music, query, limit)
-
-
-
-    return {"results": results, "total": len(results), "query": query}
+    try:
+        results = await asyncio.to_thread(recommendation_engine.search_music, query, limit)
+        return {"results": results, "total": len(results), "query": query}
+    except Exception as e:
+        print(f"⚠️ Search music handler notice for '{query}': {e}")
+        return {"results": [], "total": 0, "query": query}
 
 
 

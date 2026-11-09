@@ -196,7 +196,7 @@ class MusicPlayer:
     
     def get_youtube_id_official(self, query: str) -> Optional[str]:
         """Official YouTube Data API v3 search with quality filter"""
-        if not self.youtube:
+        if not self.youtube or getattr(self, '_quota_exhausted', False):
             return None
         
         try:
@@ -218,8 +218,10 @@ class MusicPlayer:
                         return item['id'].get('videoId')
                 # Fallback to first item if all filtered
                 return items[0]['id'].get('videoId')
-        except Exception:
-            pass
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "quota" in err_msg or "429" in err_msg or "ratelimit" in err_msg:
+                self._quota_exhausted = True
         
         return None
     
