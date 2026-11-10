@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
-import { setQueue, playSong, setActiveMood } from '../store/audioSlice';
+import { setQueue, playSong, setActiveMood, setPlaying, togglePlayPause } from '../store/audioSlice';
 import { getUserHistory, getUserCustomPlaylists, getUserPlaylistSongs } from '../utils/userStorage';
 import { cleanSongTitle } from '../utils/textHelper';
 
@@ -15,6 +15,8 @@ import { cleanSongTitle } from '../utils/textHelper';
  */
 const MoodJourneyModal = ({ isOpen, onClose }) => {
   const dispatch = useDispatch();
+  const currentSong = useSelector((state) => state.audio.currentSong);
+  const isPlaying = useSelector((state) => state.audio.isPlaying);
   const currentMood = useSelector((state) => state.audio.activeMood) || 'sad';
   const authUser = useSelector((state) => state.auth?.user);
   const reduxHistory = useSelector((state) => state.audio?.playbackHistory) || [];
@@ -26,6 +28,32 @@ const MoodJourneyModal = ({ isOpen, onClose }) => {
   const [language, setLanguage] = useState('all');
   const [isLoading, setIsLoading] = useState(false);
   const [journeyData, setJourneyData] = useState(null);
+
+  const isSongActive = (track) => {
+    if (!currentSong || !track) return false;
+    return (
+      (track.id && currentSong.id === track.id) ||
+      (track.name?.toLowerCase() === currentSong.name?.toLowerCase() &&
+       track.artist?.toLowerCase() === currentSong.artist?.toLowerCase())
+    );
+  };
+
+  const handlePlaySingleTrack = (track, e) => {
+    if (e) e.stopPropagation();
+    if (!track) return;
+    if (isSongActive(track)) {
+      dispatch(togglePlayPause());
+      return;
+    }
+    if (journeyData?.tracks) {
+      dispatch(setQueue(journeyData.tracks));
+    }
+    dispatch(playSong(track));
+    dispatch(setPlaying(true));
+    if (track.stage_mood || journeyData?.start_mood) {
+      dispatch(setActiveMood(track.stage_mood || journeyData.start_mood));
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -77,6 +105,7 @@ const MoodJourneyModal = ({ isOpen, onClose }) => {
     if (journeyData && journeyData.tracks && journeyData.tracks.length > 0) {
       dispatch(setQueue(journeyData.tracks));
       dispatch(playSong(journeyData.tracks[0]));
+      dispatch(setPlaying(true));
       dispatch(setActiveMood(journeyData.start_mood));
       onClose();
     }
@@ -301,16 +330,37 @@ const MoodJourneyModal = ({ isOpen, onClose }) => {
                 {journeyData.tracks.map((t, idx) => {
                   const isPlaylist = t.source_type === 'playlist';
                   const isHistory = t.source_type === 'history';
+                  const active = isSongActive(t);
 
                   return (
                     <div
                       key={t.id || idx}
-                      className="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-white/5 text-xs hover:border-white/15 transition-colors"
+                      onClick={(e) => handlePlaySingleTrack(t, e)}
+                      className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all cursor-pointer group ${
+                        active
+                          ? 'bg-cyan-500/15 border-cyan/40 shadow-sm'
+                          : 'bg-black/40 border-white/5 hover:border-cyan/30 hover:bg-white/5'
+                      }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
-                        <span className="font-mono text-[10px] text-slate-500 w-4 shrink-0">{idx + 1}</span>
+                        {/* Play / Index Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => handlePlaySingleTrack(t, e)}
+                          className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 transition-all ${
+                            active && isPlaying
+                              ? 'bg-cyan text-obsidian-950 scale-105'
+                              : 'bg-white/10 group-hover:bg-cyan group-hover:text-obsidian-950 text-slate-400'
+                          }`}
+                          title={active && isPlaying ? "Pause" : "Play"}
+                        >
+                          {active && isPlaying ? '⏸' : <><span className="group-hover:hidden font-mono text-[10px]">{idx + 1}</span><span className="hidden group-hover:inline text-[9px] ml-0.5">▶</span></>}
+                        </button>
+
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-white truncate">{cleanSongTitle(t.name)}</p>
+                          <p className={`font-semibold truncate transition-colors ${active ? 'text-cyan font-bold' : 'text-white group-hover:text-cyan'}`}>
+                            {cleanSongTitle(t.name)}
+                          </p>
                           <p className="text-[10px] text-slate-400 truncate">{t.artist}</p>
                         </div>
                       </div>
@@ -350,6 +400,19 @@ const MoodJourneyModal = ({ isOpen, onClose }) => {
                         <span className="px-2 py-0.5 rounded-full text-[9.5px] font-bold uppercase bg-white/10 text-cyan shrink-0">
                           Stage {t.stage_index}
                         </span>
+
+                        {/* Play Now Mini Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => handlePlaySingleTrack(t, e)}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                            active && isPlaying
+                              ? 'bg-cyan text-obsidian-950 font-extrabold'
+                              : 'bg-white/5 hover:bg-cyan hover:text-obsidian-950 text-slate-300 border border-white/10'
+                          }`}
+                        >
+                          {active && isPlaying ? 'Playing' : '▶ Play'}
+                        </button>
                       </div>
                     </div>
                   );

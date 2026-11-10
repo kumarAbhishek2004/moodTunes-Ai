@@ -3,7 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
-import { setQueue, playSong, setActiveMood } from '../store/audioSlice';
+import { setQueue, playSong, setActiveMood, setPlaying, addToQueue, togglePlayPause } from '../store/audioSlice';
 import { getUserHistory, getUserCustomPlaylists, getUserPlaylistSongs } from '../utils/userStorage';
 import { cleanSongTitle } from '../utils/textHelper';
 import { resolveMusicTheme } from '../utils/themeMap';
@@ -20,6 +20,7 @@ const RoadmapPage = () => {
   const navigate = useNavigate();
 
   const currentSong = useSelector((state) => state.audio.currentSong);
+  const isPlaying = useSelector((state) => state.audio.isPlaying);
   const activeMood = useSelector((state) => state.audio.activeMood) || 'sad';
   const authUser = useSelector((state) => state.auth?.user);
   const reduxHistory = useSelector((state) => state.audio?.playbackHistory) || [];
@@ -33,6 +34,41 @@ const RoadmapPage = () => {
   const [language, setLanguage] = useState('all');
   const [isLoading, setIsLoading] = useState(false);
   const [journeyData, setJourneyData] = useState(null);
+
+  const isSongActive = (track) => {
+    if (!currentSong || !track) return false;
+    return (
+      (track.id && currentSong.id === track.id) ||
+      (track.name?.toLowerCase() === currentSong.name?.toLowerCase() &&
+       track.artist?.toLowerCase() === currentSong.artist?.toLowerCase())
+    );
+  };
+
+  const handleStartPlayback = () => {
+    if (journeyData && journeyData.tracks && journeyData.tracks.length > 0) {
+      dispatch(setQueue(journeyData.tracks));
+      dispatch(playSong(journeyData.tracks[0]));
+      dispatch(setPlaying(true));
+      dispatch(setActiveMood(journeyData.start_mood));
+    }
+  };
+
+  const handlePlayTrack = (track, trackIndex, e) => {
+    if (e) e.stopPropagation();
+    if (!track) return;
+    if (isSongActive(track)) {
+      dispatch(togglePlayPause());
+      return;
+    }
+    if (journeyData?.tracks) {
+      dispatch(setQueue(journeyData.tracks));
+    }
+    dispatch(playSong(track));
+    dispatch(setPlaying(true));
+    if (track.stage_mood || journeyData?.start_mood) {
+      dispatch(setActiveMood(track.stage_mood || journeyData.start_mood));
+    }
+  };
 
   const moodOptions = [
     { id: 'sad', name: 'Melancholic / Sad', icon: '🌧️', color: '#3B82F6', valence: '22%', bpm: '65-80 BPM' },
@@ -75,14 +111,6 @@ const RoadmapPage = () => {
       console.error('Mood journey generation error:', err);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleStartPlayback = () => {
-    if (journeyData && journeyData.tracks && journeyData.tracks.length > 0) {
-      dispatch(setQueue(journeyData.tracks));
-      dispatch(playSong(journeyData.tracks[0]));
-      dispatch(setActiveMood(journeyData.start_mood));
     }
   };
 
@@ -427,28 +455,84 @@ const RoadmapPage = () => {
                   {journeyData.tracks.map((t, idx) => {
                     const isPlaylist = t.source_type === 'playlist';
                     const isHistory = t.source_type === 'history';
+                    const active = isSongActive(t);
 
                     return (
                       <div
                         key={t.id || idx}
-                        className="p-3.5 sm:p-4 flex items-center justify-between gap-4 hover:bg-white/5 transition-colors"
+                        onClick={(e) => handlePlayTrack(t, idx, e)}
+                        className={`p-3 sm:p-4 flex items-center justify-between gap-3 sm:gap-4 transition-all cursor-pointer group ${
+                          active
+                            ? 'bg-cyan-500/15 border-l-4 border-l-cyan'
+                            : 'hover:bg-white/5 border-l-4 border-l-transparent'
+                        }`}
                       >
-                        <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                          <span className="w-6 text-center font-mono text-xs text-slate-500 font-bold shrink-0">
-                            {idx + 1}
-                          </span>
+                        {/* LEFT: Index & Play Toggle + Thumbnail + Info */}
+                        <div className="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
+                          {/* Circular Play / Index Button */}
+                          <button
+                            type="button"
+                            onClick={(e) => handlePlayTrack(t, idx, e)}
+                            className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 transition-all ${
+                              active && isPlaying
+                                ? 'bg-cyan text-obsidian-950 shadow-lg shadow-cyan/40 scale-105'
+                                : 'bg-white/5 group-hover:bg-cyan group-hover:text-obsidian-950 text-slate-400 group-hover:scale-105 group-hover:shadow-md group-hover:shadow-cyan/30'
+                            }`}
+                            title={active && isPlaying ? "Pause Track" : "Play Track"}
+                          >
+                            {active && isPlaying ? (
+                              <span className="flex items-center justify-center gap-0.5">
+                                <span className="w-1 h-3.5 bg-obsidian-950 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                <span className="w-1 h-3.5 bg-obsidian-950 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                <span className="w-1 h-3.5 bg-obsidian-950 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                              </span>
+                            ) : (
+                              <>
+                                <span className="group-hover:hidden font-mono text-xs">{idx + 1}</span>
+                                <span className="hidden group-hover:inline text-xs ml-0.5">▶</span>
+                              </>
+                            )}
+                          </button>
+
+                          {/* Thumbnail / Art */}
+                          <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/5 border border-white/10 shrink-0 relative flex items-center justify-center">
+                            {t.image ? (
+                              <img
+                                src={t.image}
+                                alt={t.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                }}
+                              />
+                            ) : null}
+                            <span className="absolute inset-0 flex items-center justify-center text-sm select-none -z-10">
+                              🎵
+                            </span>
+                          </div>
+
+                          {/* Track Details */}
                           <div className="min-w-0 flex-1">
-                            <p className="font-bold text-sm text-white truncate">{cleanSongTitle(t.name)}</p>
-                            <p className="text-xs text-slate-400 truncate">{t.artist}</p>
+                            <p className={`font-bold text-sm truncate transition-colors ${
+                              active ? 'text-cyan font-extrabold' : 'text-white group-hover:text-cyan'
+                            }`}>
+                              {cleanSongTitle(t.name)}
+                            </p>
+                            <p className="text-xs text-slate-400 truncate flex items-center gap-2">
+                              <span>{t.artist}</span>
+                              <span className="text-[10px] font-mono text-slate-500">• Stage {t.stage_index || (idx + 1)}</span>
+                            </p>
                           </div>
                         </div>
 
+                        {/* RIGHT: Badges + Action Buttons */}
                         <div className="flex items-center gap-2 shrink-0">
                           {t.estimated_bpm && (
-                            <span className="hidden sm:inline-block text-[11px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-slate-300 border border-white/10">
+                            <span className="hidden md:inline-block text-[11px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-slate-300 border border-white/10">
                               {t.estimated_bpm} BPM
                             </span>
                           )}
+
                           <span
                             className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
                               t.is_anchor
@@ -462,10 +546,36 @@ const RoadmapPage = () => {
                           >
                             {t.is_anchor ? '🌟 MUST-HAVE ANCHOR' : isPlaylist ? 'YOUR PLAYLIST' : isHistory ? 'HISTORY' : 'AI BRIDGE'}
                           </span>
+
+                          {/* Explicit Play Button */}
+                          <button
+                            type="button"
+                            onClick={(e) => handlePlayTrack(t, idx, e)}
+                            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              active && isPlaying
+                                ? 'bg-cyan text-obsidian-950 shadow-md shadow-cyan/30'
+                                : 'bg-white/5 hover:bg-cyan hover:text-obsidian-950 text-slate-200 border border-white/10'
+                            }`}
+                            title="Play this track now"
+                          >
+                            <span>{active && isPlaying ? '⏸' : '▶'}</span>
+                            <span className="hidden sm:inline">{active && isPlaying ? 'Playing' : 'Play'}</span>
+                          </button>
                         </div>
                       </div>
                     );
                   })}
+                </div>
+
+                {/* Bottom Elevation Journey Action Button */}
+                <div className="pt-6 pb-2 flex justify-center">
+                  <button
+                    onClick={handleStartPlayback}
+                    className="px-8 py-4 rounded-full bg-gradient-to-r from-emerald-400 to-cyan text-obsidian-950 font-extrabold text-base shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-2.5 shadow-cyan/25"
+                  >
+                    <span>▶ Start Elevation Journey</span>
+                    <span>({journeyData.tracks.length} Songs)</span>
+                  </button>
                 </div>
               </div>
 
