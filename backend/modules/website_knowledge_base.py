@@ -10,8 +10,15 @@ import json
 import re
 from typing import List, Dict, Optional, Tuple
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+
+try:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    TfidfVectorizer = None
+    cosine_similarity = None
+    SKLEARN_AVAILABLE = False
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 KNOWLEDGE_STORE_FILE = os.path.join(DATA_DIR, "website_knowledge.json")
@@ -287,6 +294,10 @@ class WebsiteKnowledgeBase:
         if not self.chunks:
             return
 
+        if not SKLEARN_AVAILABLE:
+            print("ℹ️ scikit-learn not available - using keyword-based knowledge search fallback")
+            return
+
         corpus = []
         for c in self.chunks:
             text = (
@@ -309,13 +320,33 @@ class WebsiteKnowledgeBase:
         Retrieves the top-k most semantically relevant knowledge chunks for a query.
         Returns list of (chunk_dict, similarity_score).
         """
-        if not query or not query.strip() or self.vectorizer is None or self.vector_matrix is None:
+        if not query or not query.strip():
             return []
 
         # Clean query
         clean_q = re.sub(r'[^\w\s]', ' ', query.lower()).strip()
         if not clean_q:
             return []
+
+        if not SKLEARN_AVAILABLE or self.vectorizer is None or self.vector_matrix is None:
+            # Fallback keyword overlap scoring
+            tokens = set(clean_q.split())
+            results = []
+            for c in self.chunks:
+                score = 0.0
+                kws = [kw.lower() for kw in c.get('keywords', [])]
+                for kw in kws:
+                    if kw in clean_q:
+                        score += 0.3
+                for token in tokens:
+                    if token in c.get('title', '').lower():
+                        score += 0.2
+                    if token in c.get('content', '').lower():
+                        score += 0.05
+                if score >= min_similarity:
+                    results.append((c, score))
+            results.sort(key=lambda x: x[1], reverse=True)
+            return results[:top_k]
 
         q_vec = self.vectorizer.transform([clean_q])
         similarities = cosine_similarity(q_vec, self.vector_matrix)[0]
