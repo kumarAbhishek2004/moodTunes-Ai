@@ -33,7 +33,7 @@ deepgram-sdk
 
 # Database & Auth
 motor
-pymongo[srv]
+pymongo
 dnspython
 PyJWT
 passlib
