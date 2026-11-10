@@ -199,11 +199,11 @@ const AddToQueueModal = ({ isOpen, onClose, onFeedback }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-4 animate-fadeIn font-sans select-none">
-      <div className="relative w-full max-w-2xl max-h-[88vh] rounded-3xl bg-slate-950/95 border border-cyan/30 shadow-2xl p-5 sm:p-6 text-white backdrop-blur-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-5 animate-fadeIn font-sans select-none">
+      <div className="relative w-full max-w-3xl lg:max-w-4xl max-h-[90vh] rounded-3xl bg-slate-950/95 border border-cyan/30 shadow-2xl p-5 sm:p-6 text-white backdrop-blur-2xl flex flex-col overflow-hidden">
         
         {/* Ambient Top Glow */}
-        <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-72 h-36 bg-cyan/20 blur-3xl rounded-full pointer-events-none" />
+        <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-80 h-36 bg-cyan/20 blur-3xl rounded-full pointer-events-none" />
 
         {/* Floating In-Modal Toast */}
         {modalToast && (
@@ -317,16 +317,16 @@ const AddToQueueModal = ({ isOpen, onClose, onFeedback }) => {
                   return (
                     <div
                       key={sKey || i}
-                      className="pt-1.5 first:pt-0 flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition-all group"
+                      className="pt-1.5 first:pt-0 flex items-center justify-between p-2 sm:p-2.5 rounded-xl hover:bg-white/5 transition-all group gap-2.5"
                     >
-                      <div className="flex items-center gap-3 min-w-0 pr-2">
+                      <div className="flex items-center gap-3 min-w-0 flex-1 pr-1">
                         <img
                           src={resolveTrackArtwork(song)}
                           onError={handleArtworkError}
                           alt={song.name}
                           className="w-10 h-10 rounded-lg object-cover bg-slate-800 shrink-0 shadow-sm"
                         />
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="text-xs font-bold text-white truncate group-hover:text-cyan transition-colors">
                             {cleanSongTitle(song.name)}
                           </p>
@@ -337,11 +337,11 @@ const AddToQueueModal = ({ isOpen, onClose, onFeedback }) => {
                       </div>
 
                       {/* Action Buttons */}
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0 ml-auto">
                         <button
                           type="button"
                           onClick={() => handlePlayNext(song)}
-                          className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1"
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1 shrink-0"
                           title="Insert this song to play immediately after the current track"
                         >
                           <span>⚡</span>
@@ -351,10 +351,10 @@ const AddToQueueModal = ({ isOpen, onClose, onFeedback }) => {
                         <button
                           type="button"
                           onClick={() => handleAddToQueue(song)}
-                          className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1 ${
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1 shrink-0 ${
                             isAdded
                               ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                              : 'bg-cyan hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan/20'
+                              : 'bg-cyan hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan/20 font-semibold'
                           }`}
                           title="Append to the end of the queue"
                         >
@@ -382,9 +382,9 @@ const AddToQueueModal = ({ isOpen, onClose, onFeedback }) => {
 
         {/* TAB 2: From Playlists */}
         {activeTab === 'playlist' && (
-          <div className="flex-1 flex flex-col sm:flex-row gap-3 min-h-0">
+          <div className="flex-1 flex flex-col sm:flex-row gap-4 min-h-0 min-w-0 overflow-hidden">
             {/* Playlist Sidebar List */}
-            <div className="sm:w-56 shrink-0 flex sm:flex-col gap-1.5 overflow-x-auto sm:overflow-y-auto sm:border-r border-white/10 sm:pr-2 custom-scrollbar">
+            <div className="sm:w-56 lg:w-60 shrink-0 flex sm:flex-col gap-1.5 overflow-x-auto sm:overflow-y-auto sm:border-r border-white/10 sm:pr-3 custom-scrollbar">
               {allPlaylists.map((pl) => {
                 const isSelected = pl.id === selectedPlaylistId;
                 const count = pl.songs?.length || 0;
@@ -412,17 +412,17 @@ const AddToQueueModal = ({ isOpen, onClose, onFeedback }) => {
             </div>
 
             {/* Selected Playlist Content */}
-            <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 flex flex-col min-h-0 min-w-0 pl-0 sm:pl-1 overflow-hidden">
               {activePlaylist ? (
                 <>
                   {/* Playlist Top Action Header */}
-                  <div className="flex items-center justify-between pb-2.5 border-b border-white/10 shrink-0">
-                    <div>
+                  <div className="flex items-center justify-between pb-2.5 border-b border-white/10 shrink-0 gap-2">
+                    <div className="min-w-0 flex-1">
                       <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
                         <span>{activePlaylist.emoji || '🎵'}</span>
-                        <span className="truncate max-w-[200px] sm:max-w-[280px]">{activePlaylist.name}</span>
+                        <span className="truncate">{activePlaylist.name}</span>
                       </h4>
-                      <p className="text-[11px] text-slate-400">
+                      <p className="text-[11px] text-slate-400 truncate">
                         {activePlaylist.songs?.length || 0} tracks available in this playlist
                       </p>
                     </div>
@@ -431,7 +431,7 @@ const AddToQueueModal = ({ isOpen, onClose, onFeedback }) => {
                       <button
                         type="button"
                         onClick={() => handleAddAllFromPlaylist(activePlaylist)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 text-slate-950 shadow-md shadow-emerald-500/20 hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                        className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-400 to-cyan text-slate-950 shadow-md shadow-emerald-500/20 hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
                         title="Add all songs in this playlist to the queue"
                       >
                         <span>+ Add All ({activePlaylist.songs.length})</span>
@@ -440,7 +440,7 @@ const AddToQueueModal = ({ isOpen, onClose, onFeedback }) => {
                   </div>
 
                   {/* Playlist Tracks List */}
-                  <div className="flex-1 overflow-y-auto pr-1 space-y-1.5 divide-y divide-white/5 custom-scrollbar min-h-0 pt-2">
+                  <div className="flex-1 overflow-y-auto pr-1.5 space-y-1.5 divide-y divide-white/5 custom-scrollbar min-h-0 pt-2">
                     {activePlaylist.songs && activePlaylist.songs.length > 0 ? (
                       activePlaylist.songs.map((song, i) => {
                         const sKey = song.id || song.youtube_id || song.name;
@@ -448,17 +448,17 @@ const AddToQueueModal = ({ isOpen, onClose, onFeedback }) => {
                         return (
                           <div
                             key={sKey || i}
-                            className="pt-1.5 first:pt-0 flex items-center justify-between p-2 rounded-xl hover:bg-white/5 transition-all group"
+                            className="pt-1.5 first:pt-0 flex items-center justify-between p-2 sm:p-2.5 rounded-xl hover:bg-white/5 transition-all group gap-2.5"
                           >
-                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                              <span className="font-mono text-[10px] text-slate-500 w-4">{i + 1}</span>
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-1">
+                              <span className="font-mono text-[10px] text-slate-500 w-5 shrink-0 text-center">{i + 1}</span>
                               <img
                                 src={resolveTrackArtwork(song)}
                                 onError={handleArtworkError}
                                 alt={song.name}
-                                className="w-9 h-9 rounded-lg object-cover bg-slate-800 shrink-0 shadow-sm"
+                                className="w-10 h-10 rounded-lg object-cover bg-slate-800 shrink-0 shadow-sm"
                               />
-                              <div className="min-w-0">
+                              <div className="min-w-0 flex-1">
                                 <p className="text-xs font-bold text-white truncate group-hover:text-cyan transition-colors">
                                   {cleanSongTitle(song.name)}
                                 </p>
@@ -468,24 +468,24 @@ const AddToQueueModal = ({ isOpen, onClose, onFeedback }) => {
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-1.5 shrink-0">
+                            <div className="flex items-center gap-2 shrink-0 ml-auto">
                               <button
                                 type="button"
                                 onClick={() => handlePlayNext(song)}
-                                className="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1"
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1 shrink-0"
                                 title="Play immediately next"
                               >
                                 <span>⚡</span>
-                                <span className="hidden sm:inline">Next</span>
+                                <span>Next</span>
                               </button>
 
                               <button
                                 type="button"
                                 onClick={() => handleAddToQueue(song)}
-                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1 ${
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1 shrink-0 ${
                                   isAdded
                                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                    : 'bg-cyan hover:bg-cyan-400 text-slate-950 shadow-sm'
+                                    : 'bg-cyan hover:bg-cyan-400 text-slate-950 shadow-sm font-semibold'
                                 }`}
                                 title="Add to queue"
                               >
