@@ -418,7 +418,7 @@ class ArtworkService:
             try:
                 from .config import Config
                 yt_service = Config.get_youtube()
-                if yt_service:
+                if yt_service and not Config.is_youtube_quota_exhausted():
                     yt_query = f"{query} {filter_artist} official audio song".strip()
                     request = yt_service.search().list(
                         q=yt_query,
@@ -457,8 +457,10 @@ class ArtworkService:
                             "score": 0.84,
                             "source": "youtube"
                         })
-            except Exception:
-                pass
+            except Exception as e:
+                if "quota" in str(e).lower() or "429" in str(e).lower():
+                    from .config import Config
+                    Config.set_youtube_quota_exhausted(True)
 
         # 4. iTunes Search Fallback
         if len(scored_results) < limit:

@@ -133,7 +133,7 @@ def extract_youtube_playlist(url: str, custom_name: Optional[str] = None) -> Tup
 
     # --- Case A: Playlist ID found ---
     if pl_id:
-        if yt:
+        if yt and not Config.is_youtube_quota_exhausted():
             try:
                 # Fetch playlist metadata
                 pl_res = yt.playlists().list(part="snippet", id=pl_id).execute()
@@ -150,6 +150,9 @@ def extract_youtube_playlist(url: str, custom_name: Optional[str] = None) -> Tup
                         or cover_image
                     )
             except Exception as e:
+                err_str = str(e).lower()
+                if "quota" in err_str or "429" in err_str:
+                    Config.set_youtube_quota_exhausted(True)
                 print(f"Warning fetching YouTube playlist metadata: {e}")
 
             try:
@@ -228,28 +231,75 @@ def extract_youtube_playlist(url: str, custom_name: Optional[str] = None) -> Tup
                         if t_match:
                             playlist_name = t_match.group(1).strip()
 
-                    # Extract video IDs and titles from ytInitialData
-                    raw_vids = re.findall(r'"videoId":"([a-zA-Z0-9_\-]{11})"', html)
-                    # Filter unique
-                    seen = set()
-                    unique_vids = [v for v in raw_vids if not (v in seen or seen.add(v))]
+                    # 1. Try parsing rich structured items from ytInitialData
+                    m_data = re.search(r'var ytInitialData = ({.*?});</script>', html)
+                    if not m_data:
+                        m_data = re.search(r'window\["ytInitialData"\] = ({.*?});', html)
 
-                    for idx, vid in enumerate(unique_vids[:30]):
-                        tracks.append({
-                            "id": f"yt-{vid}",
-                            "name": f"Track {idx + 1}",
-                            "artist": "YouTube Music",
-                            "youtube_id": vid,
-                            "duration": 210,
-                            "image": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
-                            "mood_match": "happy"
-                        })
+                    if m_data:
+                        try:
+                            pl_json = json.loads(m_data.group(1))
+                            seen_ids = set()
+
+                            def parse_playlist_nodes(node):
+                                if isinstance(node, dict):
+                                    if "playlistVideoRenderer" in node:
+                                        pvr = node["playlistVideoRenderer"]
+                                        v_id = pvr.get("videoId")
+                                        if v_id and v_id not in seen_ids and len(v_id) == 11:
+                                            title_runs = pvr.get("title", {}).get("runs", [])
+                                            raw_t = title_runs[0].get("text", "") if title_runs else pvr.get("title", {}).get("simpleText", "")
+                                            byline_runs = pvr.get("shortBylineText", {}).get("runs", [])
+                                            raw_a = byline_runs[0].get("text", "") if byline_runs else "YouTube Artist"
+                                            if raw_t and raw_t not in ["Private video", "Deleted video"]:
+                                                seen_ids.add(v_id)
+                                                cl_title, cl_artist = clean_title_and_artist(raw_t, raw_a)
+                                                dur_sec = 210
+                                                try:
+                                                    dur_sec = int(pvr.get("lengthSeconds", 210))
+                                                except (ValueError, TypeError):
+                                                    pass
+                                                tracks.append({
+                                                    "id": f"yt-{v_id}",
+                                                    "name": cl_title or f"Track {len(tracks) + 1}",
+                                                    "artist": cl_artist or raw_a,
+                                                    "youtube_id": v_id,
+                                                    "duration": dur_sec,
+                                                    "image": f"https://i.ytimg.com/vi/{v_id}/hqdefault.jpg",
+                                                    "mood_match": "happy"
+                                                })
+                                    for val in node.values():
+                                        parse_playlist_nodes(val)
+                                elif isinstance(node, list):
+                                    for item in node:
+                                        parse_playlist_nodes(item)
+
+                            parse_playlist_nodes(pl_json)
+                        except Exception as p_err:
+                            print(f"Notice parsing playlist ytInitialData: {p_err}")
+
+                    # 2. Fallback to regex videoId extraction if structured parser yielded no items
+                    if not tracks:
+                        raw_vids = re.findall(r'"videoId":"([a-zA-Z0-9_\-]{11})"', html)
+                        seen = set()
+                        unique_vids = [v for v in raw_vids if not (v in seen or seen.add(v))]
+
+                        for idx, vid in enumerate(unique_vids[:30]):
+                            tracks.append({
+                                "id": f"yt-{vid}",
+                                "name": f"Track {idx + 1}",
+                                "artist": "YouTube Music",
+                                "youtube_id": vid,
+                                "duration": 210,
+                                "image": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
+                                "mood_match": "happy"
+                            })
             except Exception as e:
                 print(f"Direct YouTube playlist HTML scraper failed: {e}")
 
     # --- Case B: Single Video Link ---
     elif video_id:
-        if yt:
+        if yt and not Config.is_youtube_quota_exhausted():
             try:
                 v_res = yt.videos().list(part="snippet,contentDetails", id=video_id).execute()
                 if v_res.get("items"):
@@ -275,6 +325,9 @@ def extract_youtube_playlist(url: str, custom_name: Optional[str] = None) -> Tup
                         "mood_match": infer_mood(clean_title)
                     })
             except Exception as e:
+                err_str = str(e).lower()
+                if "quota" in err_str or "429" in err_str:
+                    Config.set_youtube_quota_exhausted(True)
                 print(f"Warning fetching single YouTube video: {e}")
 
     if not playlist_name:

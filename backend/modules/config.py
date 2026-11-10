@@ -61,6 +61,7 @@ class Config:
     # API Service Instances
     lastfm_network: Optional[pylast.LastFMNetwork] = None
     youtube_service = None
+    youtube_quota_exhausted: bool = False
     gemini_model = None
     deepgram_client = None
     
@@ -125,6 +126,14 @@ class Config:
     def get_youtube(cls):
         """Get YouTube service instance"""
         return cls.youtube_service
+
+    @classmethod
+    def set_youtube_quota_exhausted(cls, status: bool = True):
+        cls.youtube_quota_exhausted = status
+
+    @classmethod
+    def is_youtube_quota_exhausted(cls) -> bool:
+        return cls.youtube_quota_exhausted
     
     @classmethod
     def get_gemini(cls):

@@ -323,7 +323,22 @@ RESPONSE STYLE:
                         raise e
             # Use Groq
             elif self.groq_client:
-                bot_response = self._get_groq_response(user_message, rag_context=rag_context)
+                try:
+                    bot_response = self._get_groq_response(user_message, rag_context=rag_context)
+                except Exception as e:
+                    print(f"⚠️ Groq request notice: {e}")
+                    if self.gemini_model:
+                        print("Switching from Groq to Gemini fallback...")
+                        self.current_provider = 'gemini'
+                        self._init_gemini_chat()
+                        if self.chat:
+                            prompt_to_send = f"[AUTHENTIC PLATFORM KNOWLEDGE]:\n{rag_context}\n\nUser Question: {user_message}" if rag_context else user_message
+                            response = self.chat.send_message(prompt_to_send)
+                            bot_response = response.text
+                        else:
+                            raise e
+                    else:
+                        raise e
             else:
                 raise Exception("No API provider available")
 

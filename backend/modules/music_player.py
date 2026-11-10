@@ -196,7 +196,7 @@ class MusicPlayer:
     
     def get_youtube_id_official(self, query: str) -> Optional[str]:
         """Official YouTube Data API v3 search with quality filter"""
-        if not self.youtube or getattr(self, '_quota_exhausted', False):
+        if not self.youtube or getattr(self, '_quota_exhausted', False) or Config.is_youtube_quota_exhausted():
             return None
         
         try:
@@ -222,6 +222,7 @@ class MusicPlayer:
             err_msg = str(e).lower()
             if "quota" in err_msg or "429" in err_msg or "ratelimit" in err_msg:
                 self._quota_exhausted = True
+                Config.set_youtube_quota_exhausted(True)
         
         return None
     

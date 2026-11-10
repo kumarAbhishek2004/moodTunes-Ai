@@ -1861,7 +1861,7 @@ class RecommendationEngine:
 
         # 2. Try official API only if quota hasn't been flagged as exhausted
         youtube = Config.get_youtube()
-        quota_blocked = getattr(self, '_quota_exhausted', False)
+        quota_blocked = getattr(self, '_quota_exhausted', False) or Config.is_youtube_quota_exhausted()
 
         if youtube and not quota_blocked:
             try:
@@ -1897,6 +1897,7 @@ class RecommendationEngine:
                 if "quota" in err_str or "429" in err_str or "ratelimit" in err_str:
                     print("⚠️ YouTube Data API v3 quota exceeded (429). Switching to unlimited web scraper mode.")
                     self._quota_exhausted = True
+                    Config.set_youtube_quota_exhausted(True)
                 else:
                     print(f"⚠️ YouTube API notice: {api_error}. Falling back to web scraper.")
 
