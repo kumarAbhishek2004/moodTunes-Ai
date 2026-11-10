@@ -1,0 +1,24 @@
+name: Sync Backend to Hugging Face Space
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sync-to-space:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout GitHub Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync Backend Directory to Hugging Face Space
+        uses: huggingface/hub-sync@v0.3.0
+        with:
+          github_repo_id: ${{ github.repository }}
+          huggingface_repo_id: Abhishek2607/music-rec-backend
+          hf_token: ${{ secrets.HF_TOKEN }}
+          repo_type: space
+          subdirectory: 'backend'
